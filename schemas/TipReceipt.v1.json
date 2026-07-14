@@ -1,0 +1,39 @@
+{
+  "$id": "peranto:TipReceipt:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "TipReceipt",
+  "description": "Portable receipt for an on-chain tip. Receiver gains Love; sender gains Care (aggregated at DisCONode).",
+  "type": "object",
+  "required": ["from", "to", "amount", "asset"],
+  "properties": {
+    "from": {
+      "type": "string",
+      "description": "did:peranto of tip sender (Care ↑)"
+    },
+    "to": {
+      "type": "string",
+      "description": "did:peranto or node id of tip recipient (Love ↑)"
+    },
+    "amount": {
+      "type": ["string", "number"],
+      "description": "Tip amount in asset base units or decimal string"
+    },
+    "asset": {
+      "type": "string",
+      "description": "Native token or CAIP-19 asset id (e.g. PAS, eip155:420420417/slip44:...)"
+    },
+    "periodHint": {
+      "type": "string",
+      "description": "Optional accounting period id or block range hint"
+    },
+    "txHash": {
+      "type": "string",
+      "description": "Optional on-chain transaction hash of the tip"
+    },
+    "memo": {
+      "type": "string",
+      "description": "Optional short public memo (no PII)"
+    }
+  },
+  "additionalProperties": true
+}

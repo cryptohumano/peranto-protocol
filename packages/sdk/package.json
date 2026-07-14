@@ -1,0 +1,21 @@
+{
+  "name": "@peranto/sdk",
+  "version": "0.1.0",
+  "description": "did:peranto SDK — resolve DIDs, schemas, attesters, JWT-VC issue/verify",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json --noCheck",
+    "test": "node --import tsx --test src/**/*.test.ts"
+  },
+  "dependencies": {
+    "@noble/curves": "^1.8.0",
+    "@noble/hashes": "^1.7.0",
+    "jose": "^5.9.6",
+    "viem": "^2.21.54"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}

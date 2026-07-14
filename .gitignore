@@ -1,0 +1,15 @@
+node_modules/
+dist/
+cache/
+artifacts/
+typechain-types/
+coverage/
+.env
+.env.*
+!.env.example
+*.log
+deployments/
+!.env.example
+*.log
+.peranto/
+.DS_Store
