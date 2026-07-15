@@ -27,7 +27,9 @@
     "web:dev": "npm run dev -w @peranto/web",
     "web:build": "npm run build -w @peranto/web",
     "schemas:register": "hardhat run scripts/register-schemas.ts",
-    "seed:node": "hardhat run scripts/seed-node.ts"
+    "seed:node": "hardhat run scripts/seed-node.ts",
+    "smoke:paseo": "tsx scripts/smoke-economy.ts",
+    "smoke:disco": "tsx scripts/smoke-disco-vertices.ts"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "^5.0.0",

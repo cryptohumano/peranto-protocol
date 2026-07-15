@@ -4,8 +4,10 @@ import {
   createPublicClient,
   createWalletClient,
   decodeEventLog,
+  getAddress,
   getContract,
   http,
+  isAddress,
   parseEther,
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
@@ -51,7 +53,7 @@ import {
   type EcoTestClaims,
   type IssuedCredential,
 } from "./vc";
-import { getContractEventsChunked, labelHashOf } from "./logs";
+import { getContractEventsChunked, labelHashOf, scanNativeTransfers } from "./logs";
 import {
   ACTIVITY_TX_LABELS,
   type ActivityTx,
@@ -494,17 +496,63 @@ export class PerantoClient {
     if (!this.addresses.NameRegistry) {
       throw new Error("NameRegistry not in deployment");
     }
+    const clean = label.trim().replace(/^@+/, "").toLowerCase();
+    if (!clean) throw new Error("Nombre vacío");
     const address = await this.publicClient.readContract({
       address: this.addresses.NameRegistry,
       abi: nameRegistryAbi,
       functionName: "resolve",
-      args: [label],
+      args: [clean],
     });
     const zero = "0x0000000000000000000000000000000000000000";
     return {
-      label,
+      label: clean,
       address,
       did: address.toLowerCase() === zero ? null : formatDid(this.network, address),
+    };
+  }
+
+  /**
+   * Resolve a human handle (`@alice` / `alice`), a DID, or a raw address
+   * into `{ address, did, label? }`.
+   */
+  async resolveIdentityRef(ref: string): Promise<{
+    input: string;
+    kind: "name" | "did" | "address";
+    label?: string;
+    address: Address;
+    did: string;
+  }> {
+    const raw = ref.trim();
+    if (!raw) throw new Error("Referencia vacía");
+
+    if (raw.startsWith("did:peranto:")) {
+      const { address } = parseDid(raw);
+      return { input: raw, kind: "did", address, did: formatDid(this.network, address) };
+    }
+
+    if (isAddress(raw)) {
+      const address = getAddress(raw);
+      return {
+        input: raw,
+        kind: "address",
+        address,
+        did: formatDid(this.network, address),
+      };
+    }
+
+    const named = await this.resolveName(raw);
+    if (!named.did) {
+      throw new Error(
+        `@${named.label} no está registrado en este NameRegistry (tras un redespliegue hay que volver a registrar handles)`
+      );
+    }
+    return {
+      input: raw,
+      kind: "name",
+      label: named.label,
+      address: named.address,
+      did: named.did,
     };
   }
 
@@ -1188,6 +1236,39 @@ export class PerantoClient {
     }
 
     await Promise.all(tasks);
+
+    // Plain PAS transfers (empty calldata) — recent window only
+    try {
+      const nativeLookback = opts?.lookback && opts.lookback < 2_500n
+        ? opts.lookback
+        : 2_500n;
+      const transfers = await scanNativeTransfers(this.publicClient, account, {
+        fromBlock: opts?.fromBlock,
+        toBlock: opts?.toBlock,
+        lookback: nativeLookback,
+      });
+      for (const t of transfers) {
+        const type = t.direction === "send" ? "wallet.send" : "wallet.receive";
+        rows.push({
+          id: `${t.txHash}-${t.transactionIndex}-${type}`,
+          type,
+          label: ACTIVITY_TX_LABELS[type],
+          txHash: t.txHash,
+          blockNumber: t.blockNumber,
+          logIndex: t.transactionIndex,
+          counterpart: t.counterpart,
+          valueWei: t.valueWei,
+          detail:
+            t.direction === "send"
+              ? `Egreso → ${t.counterpart.slice(0, 10)}…`
+              : `Ingreso ← ${t.counterpart.slice(0, 10)}…`,
+          role: t.direction === "send" ? "from" : "to",
+        });
+      }
+    } catch {
+      /* native scan optional — RPC may throttle */
+    }
+
     rows.sort((a, b) => {
       if (a.blockNumber === b.blockNumber) return b.logIndex - a.logIndex;
       return a.blockNumber > b.blockNumber ? -1 : 1;
@@ -1297,6 +1378,7 @@ export class PerantoClient {
       isMine: Boolean(owner && me && owner.toLowerCase() === me),
     };
   }
+
 
   /**
    * If you already own `label` on-chain, treat it as your display name

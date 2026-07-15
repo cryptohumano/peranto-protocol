@@ -93,3 +93,34 @@ export async function loadCachedActivity(
   const rows = await activityStore.list(account, DEFAULT_NETWORK);
   return rows.map(storedToActivity);
 }
+
+/** Persist a plain native send/receive immediately (before next chain scan). */
+export async function recordLocalNativeTransfer(opts: {
+  account: Address;
+  direction: "send" | "receive";
+  txHash: `0x${string}`;
+  counterpart: Address;
+  valueWei: bigint;
+  blockNumber?: bigint;
+}): Promise<void> {
+  const type = opts.direction === "send" ? "wallet.send" : "wallet.receive";
+  const { ACTIVITY_TX_LABELS } = await import("@peranto/sdk");
+  const tx: ActivityTx = {
+    id: `${opts.txHash}-0-${type}`,
+    type,
+    label: ACTIVITY_TX_LABELS[type],
+    txHash: opts.txHash,
+    blockNumber: opts.blockNumber ?? 0n,
+    logIndex: 0,
+    counterpart: opts.counterpart,
+    valueWei: opts.valueWei,
+    detail:
+      opts.direction === "send"
+        ? `Egreso → ${opts.counterpart.slice(0, 10)}…`
+        : `Ingreso ← ${opts.counterpart.slice(0, 10)}…`,
+    role: opts.direction === "send" ? "from" : "to",
+  };
+  await activityStore.putMany([
+    activityToStored(tx, opts.account, DEFAULT_NETWORK),
+  ]);
+}

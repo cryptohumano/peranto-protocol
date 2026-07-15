@@ -549,6 +549,13 @@ export const disCONodeAbi = [
   },
   {
     type: "function",
+    name: "livelihoodPoints",
+    stateMutability: "view",
+    inputs: [{ name: "account", type: "address" }],
+    outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function",
     name: "name",
     stateMutability: "view",
     inputs: [],

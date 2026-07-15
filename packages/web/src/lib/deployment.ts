@@ -11,7 +11,8 @@ export type DeploymentJson = {
 export const PASEO_CHAIN_ID = 420420417;
 
 export async function loadPaseoDeployment(): Promise<DeploymentJson> {
-  const res = await fetch("/deployments/paseo.json");
+  const base = import.meta.env.BASE_URL || "/";
+  const res = await fetch(`${base}deployments/paseo.json`);
   if (!res.ok) throw new Error("No se pudo cargar deployments/paseo.json");
   return res.json();
 }

@@ -79,7 +79,15 @@ npm run deploy:paseo:sync
 cd packages/extension && npm run pack
 ```
 
-7. Smoke test:
+7. Smoke test (PRIVATE_KEY en `.env` + artifact `deployments/420420417.json`):
+
+```bash
+npm run smoke:paseo
+```
+
+Simula: balance → `name.register` → `stakeAndJoin` Member → emitir/anclar VC → tip 0.001 PAS a PerantoNode (o primer nodo) → `scores`. Imprime un JSON resumen. Requiere PAS en la address del deployer.
+
+CLI manual (alternativa):
 
 ```bash
 export PERANTO_NETWORK=paseo

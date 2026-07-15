@@ -23,6 +23,7 @@ import {
   portalRegisterName,
   portalReleaseName,
   portalResolveDid,
+  portalResolveIdentityRef,
   portalSetDidService,
   portalClearDidService,
   saveJwtToVault,
@@ -31,6 +32,7 @@ import {
 import { shortAddr, cn } from "@/lib/utils";
 import { FieldHint, HelpCallout } from "@/components/HelpCallout";
 import { VaultCredentialCard } from "@/components/VaultCredentialCard";
+import { upsertAddressBookEntry } from "@/lib/address-book";
 import type { DidDocument, DidService, VaultCredential } from "@peranto/sdk";
 import type { Address, Hex } from "viem";
 
@@ -62,6 +64,13 @@ export function IdentityPage() {
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
   const [importJwt, setImportJwt] = useState("");
+  const [lookupName, setLookupName] = useState("");
+  const [lookupResult, setLookupResult] = useState<{
+    label: string;
+    address: Address;
+    did: string;
+  } | null>(null);
+  const [foreignDidDoc, setForeignDidDoc] = useState<DidDocument | null>(null);
 
   const refresh = useCallback(async () => {
     const s = loadSession();
@@ -143,6 +152,22 @@ export function IdentityPage() {
       await fn();
       await refresh();
     } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** Lookups that must not overwrite session DID/services via refresh. */
+  async function runLookup(fn: () => Promise<void>) {
+    setBusy(true);
+    setErr("");
+    setMsg("");
+    try {
+      await fn();
+    } catch (e) {
+      setLookupResult(null);
+      setForeignDidDoc(null);
       setErr(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(false);
@@ -290,11 +315,149 @@ export function IdentityPage() {
 
           <TabsContent value="name" className="mt-0 space-y-3">
             <Card>
+              <CardTitle>Resolver @nombre → DID</CardTitle>
+              <CardDesc>
+                NameRegistry mapea el handle a una address; el DID es{" "}
+                <code className="text-[10px]">did:peranto:paseo:0x…</code>.
+              </CardDesc>
+              <Label className="mt-3">Nombre o @handle</Label>
+              <Input
+                value={lookupName}
+                onChange={(e) => setLookupName(e.target.value)}
+                placeholder="@alice o alice"
+              />
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button
+                  size="sm"
+                  disabled={busy || !lookupName.trim()}
+                  onClick={() =>
+                    runLookup(async () => {
+                      setLookupResult(null);
+                      setForeignDidDoc(null);
+                      const r = await portalResolveIdentityRef(lookupName.trim());
+                      setLookupResult({
+                        label: r.label ?? (r.kind === "name" ? "—" : r.kind),
+                        address: r.address,
+                        did: r.did,
+                      });
+                      setForeignDidDoc(null);
+                      setMsg(
+                        r.kind === "name"
+                          ? `@${r.label} → ${r.did}`
+                          : `Resuelto → ${r.did}`
+                      );
+                    })
+                  }
+                >
+                  Resolver
+                </Button>
+                {lookupResult && (
+                  <>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      disabled={busy}
+                      onClick={() =>
+                        runLookup(async () => {
+                          const doc = await portalResolveDid(lookupResult.did);
+                          setForeignDidDoc(doc);
+                          setMsg(
+                            `Documento de ${lookupResult.did.slice(0, 28)}…`
+                          );
+                        })
+                      }
+                    >
+                      Ver documento DID
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => {
+                        upsertAddressBookEntry({
+                          address: lookupResult.address,
+                          label: lookupResult.label.startsWith("@")
+                            ? lookupResult.label
+                            : lookupResult.label === "address" ||
+                                lookupResult.label === "did"
+                              ? shortAddr(lookupResult.address)
+                              : `@${lookupResult.label}`,
+                          note: lookupResult.did,
+                        });
+                        setMsg("Guardado en libreta de Transacciones");
+                      }}
+                    >
+                      Guardar en libreta
+                    </Button>
+                  </>
+                )}
+              </div>
+              {lookupResult && (
+                <div className="mt-3 space-y-1 rounded-xl border border-[var(--color-moss)]/12 bg-[var(--color-mist)]/30 px-3 py-2 text-sm">
+                  <p>
+                    <span className="text-[10px] uppercase text-muted-foreground">
+                      Handle / ref
+                    </span>{" "}
+                    <strong>
+                      {lookupResult.label === "address" ||
+                      lookupResult.label === "did"
+                        ? shortAddr(lookupResult.address)
+                        : `@${lookupResult.label}`}
+                    </strong>
+                  </p>
+                  <p className="font-mono text-[11px] break-all">
+                    {lookupResult.address}
+                  </p>
+                  <p className="font-mono text-[11px] break-all text-[var(--color-moss)]">
+                    {lookupResult.did}
+                  </p>
+                </div>
+              )}
+              {foreignDidDoc && lookupResult && (
+                <div className="mt-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    Documento ajeno (solo lectura) — no es tu DID
+                  </p>
+                  <p className="mt-1 truncate font-mono text-[10px] text-[var(--color-ink)]/50">
+                    {foreignDidDoc.id ?? lookupResult.did}
+                  </p>
+                  {(foreignDidDoc.service?.length ?? 0) > 0 && (
+                    <ul className="mt-2 space-y-1 text-xs">
+                      {foreignDidDoc.service!.map((s) => (
+                        <li
+                          key={s.attrKey ?? s.id}
+                          className="rounded-lg bg-[var(--color-moss)]/5 px-2 py-1.5"
+                        >
+                          <span className="font-semibold">{s.type}</span>
+                          <span className="mt-0.5 block truncate text-[var(--color-ink)]/55">
+                            {typeof s.serviceEndpoint === "string"
+                              ? s.serviceEndpoint
+                              : JSON.stringify(s.serviceEndpoint)}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  <pre className="mt-2 max-h-56 overflow-auto rounded-[var(--radius-sm)] bg-[var(--color-moss)]/5 p-3 text-[10px] leading-relaxed">
+                    {JSON.stringify(foreignDidDoc, null, 2)}
+                  </pre>
+                  <Button
+                    className="mt-2"
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setForeignDidDoc(null)}
+                  >
+                    Cerrar documento
+                  </Button>
+                </div>
+              )}
+            </Card>
+
+            <Card>
               <CardTitle>Registrar @nombre</CardTitle>
               <CardDesc>Fee → ProtocolTreasury. Visible on-chain.</CardDesc>
               <Label className="mt-3">Nombre</Label>
               <Input value={name} onChange={(e) => setName(e.target.value)} />
-              <FieldHint>Sin @; minúsculas recomendadas.</FieldHint>
+              <FieldHint>Sin @; minúsculas [a-z0-9-] longitud 3–32.</FieldHint>
               <div className="mt-3 flex flex-wrap gap-2">
                 <Button
                   disabled={busy || !name.trim()}

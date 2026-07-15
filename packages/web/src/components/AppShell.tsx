@@ -1,6 +1,6 @@
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useCallback, useEffect, useState } from "react";
-import { ArrowLeftRight, BadgeCheck, BookOpen, Fingerprint, Landmark, LogOut, Users, Wallet } from "lucide-react";
+import { ArrowLeftRight, BadgeCheck, BookOpen, Fingerprint, Landmark, LogOut, Store, Users, Wallet } from "lucide-react";
 import { shortAddr } from "@/lib/utils";
 import { formatPas } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
@@ -34,6 +34,7 @@ import { loadActiveDisco } from "@/lib/disco";
 const NAV = [
   { to: "/id", label: "Identidad", icon: Fingerprint },
   { to: "/coop", label: "Cooperativa", icon: Users },
+  { to: "/economia", label: "Economía", icon: Store },
   { to: "/credentials", label: "Credenciales", icon: BadgeCheck },
   { to: "/guide", label: "Guía", icon: BookOpen },
   { to: "/activity", label: "Transacciones", icon: ArrowLeftRight },

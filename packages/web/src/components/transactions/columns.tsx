@@ -26,6 +26,8 @@ const TYPE_TONE: Partial<Record<ActivityTxType, string>> = {
   "disco.member.leave": "bg-muted text-muted-foreground",
   "disco.dissolve": "bg-[var(--color-danger)]/10 text-[var(--color-danger)]",
   "disco.harvest": "bg-[var(--color-clay)]/20 text-[var(--color-moss-deep)]",
+  "wallet.send": "bg-[var(--color-danger)]/10 text-[var(--color-danger)]",
+  "wallet.receive": "bg-[var(--color-moss)]/15 text-[var(--color-moss-deep)]",
 };
 
 const ROLE_HINT: Record<string, string> = {
@@ -97,8 +99,24 @@ export const activityColumns: ColumnDef<ActivityTx>[] = [
       if (v === undefined) {
         return <div className="text-right text-muted-foreground">—</div>;
       }
+      const sign =
+        row.original.type === "wallet.send" ||
+        (row.original.type === "disco.tip" && row.original.role === "from") ||
+        (row.original.type === "disco.contribute" && row.original.role === "from")
+          ? "−"
+          : row.original.type === "wallet.receive" ||
+              (row.original.type === "disco.tip" && row.original.role === "to")
+            ? "+"
+            : "";
       return (
-        <div className="text-right font-mono text-sm tabular-nums">
+        <div
+          className={cn(
+            "text-right font-mono text-sm tabular-nums",
+            sign === "−" && "text-[var(--color-danger)]",
+            sign === "+" && "text-[var(--color-moss)]"
+          )}
+        >
+          {sign}
           {formatPas(v)} PAS
         </div>
       );

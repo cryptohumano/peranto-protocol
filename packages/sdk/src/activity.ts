@@ -12,7 +12,9 @@ export type ActivityTxType =
   | "disco.member.join"
   | "disco.member.leave"
   | "disco.dissolve"
-  | "disco.harvest";
+  | "disco.harvest"
+  | "wallet.send"
+  | "wallet.receive";
 
 export const ACTIVITY_TX_LABELS: Record<ActivityTxType, string> = {
   "name.register": "Nombre registrado",
@@ -26,6 +28,8 @@ export const ACTIVITY_TX_LABELS: Record<ActivityTxType, string> = {
   "disco.member.leave": "Baja de miembro",
   "disco.dissolve": "Nodo disuelto",
   "disco.harvest": "Harvest",
+  "wallet.send": "Envío PAS",
+  "wallet.receive": "Recepción PAS",
 };
 
 export type ActivityTx = {

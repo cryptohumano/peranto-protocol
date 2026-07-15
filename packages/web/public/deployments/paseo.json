@@ -1,0 +1,30 @@
+{
+  "network": "paseo",
+  "chainId": 420420417,
+  "deployedAt": "2026-07-15T06:52:59.457Z",
+  "deployer": "0x354151d1039Ba06862f8a5062b37BCb8b082cEDF",
+  "treasury": "0x88e4D204b25cda631EDe454E5BCB93E29EF12C2D",
+  "minStake": "0",
+  "unbondDelay": "604800",
+  "anchorFee": "0",
+  "nameFee": "0",
+  "periodBlocks": "432000",
+  "reserveFloor": "0",
+  "contracts": {
+    "ProtocolTreasury": "0x88e4D204b25cda631EDe454E5BCB93E29EF12C2D",
+    "DisCOFactory": "0xF17FA9F8fAEe5151476835204da492c57A75C89c",
+    "PerantoNode": "0x3bd67AC70C462ff31767Df8E74c02CA50437B68C",
+    "DIDRegistry": "0x4beb3BF860f99F00C2eEDc13731948F39aAdc001",
+    "SchemaRegistry": "0x5508Deec4FF11A9adB8cDe80d178Ff81D3589Db3",
+    "AttesterRegistry": "0xb5C089c6Ef8c3e37989bba4fa626A3Dd1B1Ab9eb",
+    "CredentialStatusRegistry": "0x72752894Bb393fC5A07E4BcFb7d5f43e0aA2C162",
+    "NameRegistry": "0xcc749a8f98D81e673c499ae546dBD2305573883f"
+  },
+  "schemas": {
+    "peranto:EcoTestResult:v1": "0xa9668dbee43b6446a78b548fba471eb89478191b2583686165f2fdcf947a0ac8",
+    "peranto:TipReceipt:v1": "0x19e665ae998a9a89cff9c8fccd4c0772aff28f793784290a348f06c22b379170",
+    "peranto:Member:v1": "0xdfbda782f40df41f132828c514cec4bd839fb01d3eb5e65901451bd87955d9c9",
+    "peranto:CommonsWork:v1": "0x2aa6d80cfd655cdbd2c693794f6fdb2576249c9974b2608ea7e65f7b07e4219d",
+    "peranto:CareContribution:v1": "0x945acb40b9dda957fd8d9d6fe951636f4f3e3d5d5a889522874c3172696e24e1"
+  }
+}

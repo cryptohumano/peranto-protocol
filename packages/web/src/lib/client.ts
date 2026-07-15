@@ -238,6 +238,17 @@ export async function portalResolveDid(did: string) {
   return client.resolveDid(did);
 }
 
+export async function portalResolveName(label: string) {
+  const client = await getReadClient();
+  return client.resolveName(label);
+}
+
+/** Accepts `@name`, DID, or 0x address. */
+export async function portalResolveIdentityRef(ref: string) {
+  const client = await getReadClient();
+  return client.resolveIdentityRef(ref);
+}
+
 export async function portalDeactivateDid(session?: SessionIdentity | null) {
   if (writeMode(session) === "aura") {
     return auraAction("did.deactivate", {});
@@ -393,4 +404,70 @@ export async function portalContribute(
   const client = await getWriteClient(session);
   const { parseEther } = await import("viem");
   return client.contribute(node, parseEther(valueEther));
+}
+
+/** Native PAS/ETH transfer between EOAs (not a DisCO tip). */
+export async function portalSendNative(
+  to: Address,
+  valueEther: string,
+  session?: SessionIdentity | null
+): Promise<Hex> {
+  const s = session ?? loadSession();
+  if (!s) throw new Error("Sin sesión");
+  const { parseEther, createWalletClient, createPublicClient, http, parseGwei } =
+    await import("viem");
+  const { privateKeyToAccount } = await import("viem/accounts");
+  const value = parseEther(valueEther);
+  if (value <= 0n) throw new Error("Monto debe ser > 0");
+
+  if (writeMode(s) === "aura") {
+    await ensureAuraMatchesPortal();
+    const provider = getAuraProvider();
+    if (!provider) throw new Error("Aura no disponible");
+    const accounts = (await provider.request({
+      method: "eth_requestAccounts",
+    })) as string[];
+    const from = accounts[0];
+    if (!from) throw new Error("Aura sin cuentas");
+    const txHash = (await provider.request({
+      method: "eth_sendTransaction",
+      params: [
+        {
+          from,
+          to,
+          value: `0x${value.toString(16)}`,
+        },
+      ],
+    })) as Hex;
+    return txHash;
+  }
+
+  if (!s.privateKey || s.privateKey.length < 10) {
+    throw new Error("Sesión HD local sin clave");
+  }
+  const account = privateKeyToAccount(s.privateKey);
+  const chain = {
+    id: 420420417,
+    name: "Polkadot Hub TestNet",
+    nativeCurrency: { name: "PAS", symbol: "PAS", decimals: 18 },
+    rpcUrls: { default: { http: [DEFAULT_RPC] } },
+  } as const;
+  const wallet = createWalletClient({
+    account,
+    chain,
+    transport: http(DEFAULT_RPC),
+  });
+  const publicClient = createPublicClient({
+    chain,
+    transport: http(DEFAULT_RPC),
+  });
+  const hash = await wallet.sendTransaction({
+    to,
+    value,
+    // Paseo eth-rpc often rejects low priority tips
+    maxPriorityFeePerGas: parseGwei("30"),
+    maxFeePerGas: parseGwei("60"),
+  });
+  await publicClient.waitForTransactionReceipt({ hash });
+  return hash;
 }

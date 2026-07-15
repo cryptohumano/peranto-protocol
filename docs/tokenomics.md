@@ -1,6 +1,8 @@
 # Tokenomics — did:peranto
 
-> Visión de protocolo (DisCO, Livelihood/Love/Care, tips, arquitectura): [protocolo-peranto.md](./protocolo-peranto.md) §8–8.1.
+> Visión de protocolo (DisCO, Livelihood/Love/Care, tips, arquitectura): [protocolo-peranto.md](./protocolo-peranto.md) §8–8.1.  
+> **Escenarios y proyecciones de demo** (stake/unbond, VCs, tips, contribute, harvest): [tokenomics-scenarios.md](./tokenomics-scenarios.md).  
+> **Corrida smoke real** (contadores + proyección de epoch): [tokenomics-smoke-sim.md](./tokenomics-smoke-sim.md).
 
 Sin token ERC-20 propio. Peso económico = token nativo de la red (**PAS** en Paseo Hub TestNet).
 

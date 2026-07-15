@@ -59,6 +59,7 @@ npm run cli -- disco scores 0xNode... 0xAccount...
 | `docs/did-peranto-method.md` | Method spec (W3C DID Core oriented) |
 | `docs/protocolo-peranto.md` | Whitepaper + glosario |
 | `docs/tokenomics.md` | PAS stake / fees / tips / reparto |
+| `docs/tokenomics-scenarios.md` | Escenarios demo Love/Care/livelihood/stake |
 | `docs/paseo-deploy.md` | Deploy checklist for Paseo |
 | `docs/disco-config.example.json` | Config UI cooperativa |
 | `schemas/` | EcoTest, TipReceipt, Member, CommonsWork, Care |
@@ -66,10 +67,18 @@ npm run cli -- disco scores 0xNode... 0xAccount...
 ### Portal web
 
 ```bash
-npm run web:dev          # http://localhost:5173 — /login /id /coop
+npm run web:dev          # http://localhost:5173 — /login /id /coop /economia
 npm run schemas:register -- --network paseo   # schemas nuevos sin redeploy
 npm run seed:node -- --network paseo          # createNode EcoLab
+npm run smoke:paseo      # name + Member VC + tip/scores (PRIVATE_KEY + deployments/420420417.json)
+npm run smoke:disco      # Love/Care/Livelihood multi-cuenta + proyección epoch
 ```
+
+Rutas: Identidad, Cooperativa, **Economía** (DisCOs + schemas + Love/Care), Credenciales, Guía, Transacciones, Tesoros.
+
+**GitHub Pages:** portal estático (sin backend). Lecturas DID/nombre/economía van al RPC público de Paseo desde el navegador. Tras push a `minimal`/`main`, Actions despliega a  
+`https://cryptohumano.github.io/peranto-protocol/` (rutas hash: `#/login`, `#/id`, …).  
+Tokenómica de la corrida smoke: [docs/tokenomics-smoke-sim.md](docs/tokenomics-smoke-sim.md).
 
 ### Aura Wallet (extensión)
 
