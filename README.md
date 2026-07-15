@@ -3,7 +3,8 @@
 Decentralized identifiers (`did:peranto`), verifiable credentials, and cooperative **DisCO** node treasuries targeting local Hardhat and **Paseo** (Polkadot Hub TestNet, chain id `420420417`).
 
 **Protocolo / whitepaper + glosario:** [docs/protocolo-peranto.md](docs/protocolo-peranto.md)  
-**Privacidad mínima (research):** [docs/research-privacy-cooperatives.md](docs/research-privacy-cooperatives.md)
+**Privacidad mínima (research):** [docs/research-privacy-cooperatives.md](docs/research-privacy-cooperatives.md)  
+**DID method v0.1 / DIF:** [docs/did-peranto-method.md](docs/did-peranto-method.md) · [docs/dif-w3c-compliance.md](docs/dif-w3c-compliance.md)
 
 ## Quick start
 
@@ -56,7 +57,9 @@ npm run cli -- disco scores 0xNode... 0xAccount...
 | `packages/cli` | Demo CLI (`did`, `vc`, `name`, `disco`) |
 | `packages/extension` | **Aura Wallet** — extensión MV3 (identidad, VCs, DisCO, EIP-1193) |
 | `packages/web` | Portal identidad / DisCO (Vite + Tailwind 4 + shadcn) |
-| `docs/did-peranto-method.md` | Method spec (W3C DID Core oriented) |
+| `packages/uni-resolver-driver-did-peranto` | Driver DIF: `GET /1.0/identifiers/{did}` → Paseo |
+| `docs/did-peranto-method.md` | Method spec **v0.1** (W3C DID Core oriented) |
+| `docs/dif-w3c-compliance.md` | Checklist registro W3C + Universal Resolver |
 | `docs/protocolo-peranto.md` | Whitepaper + glosario |
 | `docs/tokenomics.md` | PAS stake / fees / tips / reparto |
 | `docs/tokenomics-scenarios.md` | Escenarios demo Love/Care/livelihood/stake |

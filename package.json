@@ -29,7 +29,9 @@
     "schemas:register": "hardhat run scripts/register-schemas.ts",
     "seed:node": "hardhat run scripts/seed-node.ts",
     "smoke:paseo": "tsx scripts/smoke-economy.ts",
-    "smoke:disco": "tsx scripts/smoke-disco-vertices.ts"
+    "smoke:disco": "tsx scripts/smoke-disco-vertices.ts",
+    "driver:dev": "npm run dev -w @peranto/uni-resolver-driver-did-peranto",
+    "driver:build": "npm run build -w @peranto/sdk && npm run build -w @peranto/uni-resolver-driver-did-peranto"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "^5.0.0",
