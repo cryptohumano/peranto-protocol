@@ -80,9 +80,10 @@ npm run smoke:disco      # Love/Care/Livelihood multi-cuenta + proyección epoch
 
 Rutas: Identidad, Cooperativa, **Economía** (DisCOs + schemas + Love/Care), Credenciales, Guía, Transacciones, Tesoros.
 
-**GitHub Pages:** portal estático (sin backend). Lecturas DID/nombre/economía van al RPC público de Paseo desde el navegador. Tras push a `minimal`/`main`, Actions despliega a  
-`https://cryptohumano.github.io/peranto-protocol/` (rutas hash: `#/login`, `#/id`, …).  
-Tokenómica de la corrida smoke: [docs/tokenomics-smoke-sim.md](docs/tokenomics-smoke-sim.md).
+**GitHub Pages:** [https://cryptohumano.github.io/peranto-protocol/#/login](https://cryptohumano.github.io/peranto-protocol/#/login)  
+Portal estático (sin backend). Lecturas DID/nombre/economía → RPC público de Paseo.  
+Tokenómica smoke: [docs/tokenomics-smoke-sim.md](docs/tokenomics-smoke-sim.md).  
+DID / DIF: [docs/did-peranto-method.md](docs/did-peranto-method.md) · [docs/dif-w3c-compliance.md](docs/dif-w3c-compliance.md) · [docs/external-prs-draft.md](docs/external-prs-draft.md).
 
 ### Aura Wallet (extensión)
 
