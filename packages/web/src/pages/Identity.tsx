@@ -1,0 +1,461 @@
+import { useCallback, useEffect, useState } from "react";
+import { Link, Navigate } from "react-router-dom";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Card, CardDesc, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  IdentityDashboard,
+  type Belonging,
+} from "@/components/IdentityDashboard";
+import {
+  loadSession,
+  saveSession,
+  knownNamesFor,
+  rememberName,
+  type SessionIdentity,
+} from "@/lib/session";
+import {
+  fetchAuraVault,
+  getReadClient,
+  portalRegisterName,
+  portalReleaseName,
+  portalResolveDid,
+  portalSetDidService,
+  portalClearDidService,
+  saveJwtToVault,
+  vault,
+} from "@/lib/client";
+import { shortAddr, cn } from "@/lib/utils";
+import { FieldHint, HelpCallout } from "@/components/HelpCallout";
+import { VaultCredentialCard } from "@/components/VaultCredentialCard";
+import type { DidDocument, DidService, VaultCredential } from "@peranto/sdk";
+import type { Address, Hex } from "viem";
+
+const STATUS = ["None", "Active", "Revoked"];
+const SVC_PRESETS = [
+  { type: "LinkedDomains", hint: "Dominio / sitio web público" },
+  { type: "CredentialInbox", hint: "Dónde recibir solicitudes de VC" },
+  { type: "AuraInbox", hint: "Canal Aura / mensajería" },
+  { type: "Website", hint: "Página del proyecto" },
+] as const;
+
+export function IdentityPage() {
+  const [session, setSession] = useState<SessionIdentity | null>(null);
+  const [creds, setCreds] = useState<VaultCredential[]>([]);
+  const [walletWei, setWalletWei] = useState<bigint | null>(null);
+  const [belongings, setBelongings] = useState<Belonging[]>([]);
+  const [anchors, setAnchors] = useState<
+    Array<{ credHash: Hex; schemaId: Hex; attester: Address; subject: Address }>
+  >([]);
+  const [services, setServices] = useState<DidService[]>([]);
+  const [attesterOk, setAttesterOk] = useState<boolean | null>(null);
+  const [tab, setTab] = useState("overview");
+  const [name, setName] = useState("");
+  const [svcType, setSvcType] = useState("LinkedDomains");
+  const [svcKey, setSvcKey] = useState("");
+  const [svcEndpoint, setSvcEndpoint] = useState("");
+  const [didDoc, setDidDoc] = useState<DidDocument | null>(null);
+  const [msg, setMsg] = useState("");
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [importJwt, setImportJwt] = useState("");
+
+  const refresh = useCallback(async () => {
+    const s = loadSession();
+    setSession(s);
+    if (!s) return;
+    const local = await vault.list();
+    const aura = await fetchAuraVault();
+    const merged = [...local];
+    for (const a of aura) {
+      if (!merged.find((m) => m.id === a.id)) merged.push(a);
+      await vault.put(a);
+    }
+    setCreds(
+      merged.filter(
+        (c) =>
+          c.subjectDid.toLowerCase().includes(s.address.slice(2).toLowerCase()) ||
+          c.subjectDid === s.did
+      )
+    );
+
+    try {
+      const client = await getReadClient();
+      const list = await client.queryCredentialAnchors({ subject: s.address });
+      setAnchors(list);
+      const hints = [
+        ...(s.displayName ? [s.displayName] : []),
+        ...knownNamesFor(s.address),
+      ];
+      const primary = await client.getPrimaryName(s.address, hints);
+      if (primary && primary !== s.displayName) {
+        rememberName(s.address, primary);
+        const next = { ...s, displayName: primary };
+        saveSession(next);
+        setSession(next);
+      }
+      const holdings = await client.getHoldings(s.address);
+      setWalletWei(holdings.walletWei);
+      setBelongings(
+        holdings.nodes.map((n) => ({
+          name: n.name,
+          address: n.address,
+          balanceWei: n.balanceWei,
+          role: n.role,
+        }))
+      );
+
+      try {
+        const doc = await client.resolveDid(s.did);
+        setDidDoc(doc);
+        setServices(doc.service ?? []);
+      } catch {
+        setServices([]);
+      }
+
+      try {
+        const ok = await client.isAuthorized(s.address, "peranto:Member:v1");
+        setAttesterOk(ok);
+      } catch {
+        setAttesterOk(null);
+      }
+    } catch (e) {
+      console.warn(e);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  if (!session && loadSession() === null) {
+    return <Navigate to="/login" replace />;
+  }
+
+  async function run(fn: () => Promise<void>) {
+    setBusy(true);
+    setErr("");
+    setMsg("");
+    try {
+      await fn();
+      await refresh();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="mx-auto max-w-4xl px-4 py-8">
+      {session && (
+        <Tabs value={tab} onValueChange={setTab} className="gap-0">
+          <TabsList className="mb-6 flex h-auto w-full flex-wrap justify-start gap-1 bg-transparent p-0">
+            <TabsTrigger
+              value="overview"
+              className="rounded-full border border-transparent data-[state=active]:border-[var(--color-moss)]/25 data-[state=active]:bg-[var(--color-moss)]/10"
+            >
+              Vista
+            </TabsTrigger>
+            <TabsTrigger value="vault" className="rounded-full">
+              Vault
+            </TabsTrigger>
+            <TabsTrigger value="anchors" className="rounded-full">
+              Anclas
+            </TabsTrigger>
+            <TabsTrigger value="name" className="rounded-full">
+              Nombre
+            </TabsTrigger>
+            <TabsTrigger value="did" className="rounded-full">
+              DID
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="overview" className="mt-0">
+            <IdentityDashboard
+              displayName={session.displayName ?? undefined}
+              did={session.did}
+              address={session.address}
+              source={session.source}
+              walletWei={walletWei}
+              belongings={belongings}
+              creds={creds}
+              anchors={anchors}
+              services={services}
+              attesterOk={attesterOk}
+              onOpenTools={(t) => setTab(t)}
+            />
+          </TabsContent>
+
+          <TabsContent value="vault" className="mt-0 space-y-3">
+            <Card>
+              <CardTitle>Credenciales (JWT)</CardTitle>
+              <CardDesc>IndexedDB local + sync Aura si está disponible.</CardDesc>
+              {creds.length === 0 && (
+                <p className="mt-3 text-sm text-[var(--color-ink)]/60">Vacío.</p>
+              )}
+              <ul className="mt-3 space-y-2">
+                {creds.map((c) => (
+                  <VaultCredentialCard
+                    key={c.id}
+                    cred={c}
+                    onVerify={() =>
+                      run(async () => {
+                        const client = await getReadClient();
+                        const v = await client.verifyCredential(c.jwt);
+                        setMsg(
+                          `JWT ${v.jwtValid ? "ok" : "fail"} · chain ${STATUS[v.onChainStatus]} · auth ${v.authorized}`
+                        );
+                      })
+                    }
+                  />
+                ))}
+              </ul>
+              <div className="mt-4">
+                <Label>Importar JWT</Label>
+                <Textarea
+                  value={importJwt}
+                  onChange={(e) => setImportJwt(e.target.value)}
+                  placeholder="eyJhbGciOi…"
+                />
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <Button
+                    size="sm"
+                    disabled={busy || !importJwt.trim()}
+                    onClick={() =>
+                      run(async () => {
+                        const client = await getReadClient();
+                        const v = await client.verifyCredential(importJwt.trim());
+                        if (!v.jwtValid) throw new Error(v.details.error ?? "JWT inválido");
+                        await saveJwtToVault({
+                          jwt: importJwt.trim(),
+                          credHash: v.details.credHash,
+                          schemaKey:
+                            ((v.details.vc.credentialSchema as { id?: string } | undefined)?.id) ??
+                            "unknown",
+                          subjectDid: v.details.subjectDid,
+                          issuerDid: v.details.issuerDid,
+                        });
+                        setImportJwt("");
+                        setMsg("JWT guardado en vault");
+                      })
+                    }
+                  >
+                    Guardar
+                  </Button>
+                  <Link
+                    to="/credentials"
+                    className={cn(buttonVariants({ size: "sm", variant: "secondary" }))}
+                  >
+                    Solicitar / emitir
+                  </Link>
+                </div>
+              </div>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="anchors" className="mt-0">
+            <Card>
+              <CardTitle>Anclas on-chain</CardTitle>
+              <CardDesc>
+                Solo hash + schema + subject + attester + status (sin claims).
+              </CardDesc>
+              <Button
+                className="mt-3"
+                size="sm"
+                variant="secondary"
+                disabled={busy}
+                onClick={() => run(refresh)}
+              >
+                Refrescar
+              </Button>
+              <ul className="mt-3 space-y-2 text-sm">
+                {anchors.map((a) => (
+                  <li key={a.credHash} className="border-b border-[var(--color-moss)]/10 py-2">
+                    <code className="text-[10px]">{a.credHash}</code>
+                    <p className="text-xs text-[var(--color-ink)]/60">
+                      attester {shortAddr(a.attester)}
+                    </p>
+                  </li>
+                ))}
+                {anchors.length === 0 && (
+                  <p className="text-[var(--color-ink)]/55">Sin anclas para esta address.</p>
+                )}
+              </ul>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="name" className="mt-0 space-y-3">
+            <Card>
+              <CardTitle>Registrar @nombre</CardTitle>
+              <CardDesc>Fee → ProtocolTreasury. Visible on-chain.</CardDesc>
+              <Label className="mt-3">Nombre</Label>
+              <Input value={name} onChange={(e) => setName(e.target.value)} />
+              <FieldHint>Sin @; minúsculas recomendadas.</FieldHint>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button
+                  disabled={busy || !name.trim()}
+                  onClick={() =>
+                    run(async () => {
+                      await portalRegisterName(name.trim(), session);
+                      setMsg(`Registrado @${name.trim()}`);
+                    })
+                  }
+                >
+                  Registrar
+                </Button>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  disabled={busy || !session.displayName}
+                  onClick={() =>
+                    run(async () => {
+                      await portalReleaseName(
+                        session.displayName!,
+                        session
+                      );
+                      setMsg("Nombre liberado");
+                    })
+                  }
+                >
+                  Liberar actual
+                </Button>
+              </div>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="did" className="mt-0 space-y-3">
+            <HelpCallout title="Servicios DID">
+              <p>
+                Varios del mismo tipo con slot (<code className="text-[10px]">Type.slot</code>).
+                Solo endpoints públicos — no PII en atributos.
+              </p>
+            </HelpCallout>
+            <Card>
+              <CardTitle>Publicar servicio</CardTitle>
+              <div className="mt-3 flex flex-wrap gap-1">
+                {SVC_PRESETS.map((p) => (
+                  <Button
+                    key={p.type}
+                    size="sm"
+                    variant={svcType === p.type ? "default" : "secondary"}
+                    onClick={() => setSvcType(p.type)}
+                  >
+                    {p.type}
+                  </Button>
+                ))}
+              </div>
+              <FieldHint className="mt-2">
+                {SVC_PRESETS.find((p) => p.type === svcType)?.hint}
+              </FieldHint>
+              <Label className="mt-2">Slot (opcional)</Label>
+              <Input
+                value={svcKey}
+                onChange={(e) => setSvcKey(e.target.value)}
+                placeholder="web / lab"
+              />
+              <Label className="mt-2">Endpoint</Label>
+              <Input
+                value={svcEndpoint}
+                onChange={(e) => setSvcEndpoint(e.target.value)}
+                placeholder="https://…"
+              />
+              <Button
+                className="mt-3"
+                disabled={busy || !svcEndpoint.trim()}
+                onClick={() =>
+                  run(async () => {
+                    await portalSetDidService(
+                      svcType,
+                      svcEndpoint.trim(),
+                      session,
+                      svcKey.trim() || undefined
+                    );
+                    setMsg("Servicio publicado");
+                    setSvcEndpoint("");
+                  })
+                }
+              >
+                Publicar
+              </Button>
+            </Card>
+            <Card>
+              <CardTitle>Servicios actuales</CardTitle>
+              {services.length === 0 ? (
+                <p className="mt-2 text-sm text-muted-foreground">Ninguno.</p>
+              ) : (
+                <ul className="mt-2 space-y-2">
+                  {services.map((s) => (
+                    <li
+                      key={s.attrKey ?? s.id}
+                      className="flex items-start justify-between gap-2 rounded-xl border border-[var(--color-moss)]/12 px-3 py-2 text-sm"
+                    >
+                      <div className="min-w-0">
+                        <p className="font-semibold">{s.type}</p>
+                        <p className="truncate text-xs text-[var(--color-ink)]/55">
+                          {typeof s.serviceEndpoint === "string"
+                            ? s.serviceEndpoint
+                            : JSON.stringify(s.serviceEndpoint)}
+                        </p>
+                      </div>
+                      {s.attrKey && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          disabled={busy}
+                          onClick={() =>
+                            run(async () => {
+                              await portalClearDidService(s.attrKey!, session);
+                              setMsg("Servicio borrado");
+                            })
+                          }
+                        >
+                          Borrar
+                        </Button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <Button
+                className="mt-3"
+                size="sm"
+                variant="secondary"
+                disabled={busy}
+                onClick={() =>
+                  run(async () => {
+                    const doc = await portalResolveDid(session.did);
+                    setDidDoc(doc);
+                    setServices(doc.service ?? []);
+                    setMsg("Resolve OK");
+                  })
+                }
+              >
+                Re-resolve
+              </Button>
+            </Card>
+            {didDoc && (
+              <Card>
+                <CardTitle>Documento resolve (JSON)</CardTitle>
+                <pre className="mt-2 max-h-48 overflow-auto rounded-[var(--radius-sm)] bg-[var(--color-moss)]/5 p-3 text-[10px] leading-relaxed">
+                  {JSON.stringify(didDoc, null, 2)}
+                </pre>
+              </Card>
+            )}
+          </TabsContent>
+        </Tabs>
+      )}
+
+      {(msg || err) && (
+        <p
+          className={`mt-4 text-sm ${err ? "text-[var(--color-danger)]" : "text-[var(--color-moss)]"}`}
+        >
+          {err || msg}
+        </p>
+      )}
+    </div>
+  );
+}

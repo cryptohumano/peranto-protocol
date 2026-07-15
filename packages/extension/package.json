@@ -1,0 +1,28 @@
+{
+  "name": "@peranto/aura-wallet",
+  "version": "0.1.2",
+  "private": true,
+  "description": "Aura Wallet — extensión Chrome/Firefox para did:peranto + VC + DisCO",
+  "type": "module",
+  "scripts": {
+    "dev": "vite build --watch",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "pack": "npm run build && mkdir -p ../../releases && rm -f ../../releases/aura-wallet.zip && (cd dist && zip -r ../../../releases/aura-wallet.zip .)",
+    "extension:pack": "npm run pack"
+  },
+  "dependencies": {
+    "@peranto/sdk": "*",
+    "@polkadot/keyring": "^14.0.3",
+    "@polkadot/util": "^14.0.3",
+    "@polkadot/util-crypto": "^14.0.3",
+    "@scure/bip39": "^1.6.0",
+    "viem": "^2.21.54"
+  },
+  "devDependencies": {
+    "@crxjs/vite-plugin": "^2.0.0-beta.28",
+    "@types/chrome": "^0.0.287",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.3"
+  }
+}

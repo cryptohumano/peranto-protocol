@@ -1,6 +1,7 @@
 # did:peranto Method Specification (Draft)
 
-> Visión de protocolo y glosario: [protocolo-peranto.md](./protocolo-peranto.md).
+> Visión de protocolo y glosario: [protocolo-peranto.md](./protocolo-peranto.md).  
+Privacidad mínima y operaciones cooperativas: [research-privacy-cooperatives.md](./research-privacy-cooperatives.md).
 
 **Status:** Implementer's Draft  
 **Method name:** `peranto`  
@@ -36,15 +37,29 @@ Generate a secp256k1 key pair → derive Ethereum/`AccountId20` address → form
 1. Parse network + address.
 2. Build minimal DID Document with `EcdsaSecp256k1RecoveryMethod2020` and `blockchainAccountId` = `eip155:<chainId>:<address>`.
 3. If `DIDRegistry.deactivated(address)`, set `deactivated: true`.
-4. Optional enrichment: consume `DIDAttributeChanged` / `DIDDelegateChanged` events for services and extra keys (SDK MVP returns minimal + deactivated flag).
+4. Enrichment: consume `DIDAttributeChanged` events whose `name` is `did/svc/<ServiceType>` (bytes32 right-padded ASCII). Active entries (`validTo > now`) become DID Document `service[]`.
 
-### Update
+### Services (Update)
 
-Only `identityOwner(identity)` may:
+Owner calls `DIDRegistry.setAttribute(identity, name, value, validity)`:
+
+| Field | Convention |
+|-------|------------|
+| `name` | `did/svc/<Type>` or `did/svc/<Type>.<slot>` as bytes32 (e.g. `did/svc/LinkedDomains`, `did/svc/LinkedDomains.github`) |
+| `value` | UTF-8 JSON `{ "id", "type", "serviceEndpoint" }` or plain UTF-8 endpoint string |
+| `validity` | Seconds from now; use `0` to expire/clear |
+
+SDK helpers: `setDidService`, `clearDidService`, `resolveDid` (returns `service` array).
+
+Names (`NameRegistry`) and credential anchors are **not** part of the DID Document; they are companion indexes.
+
+### Update (other)
+
+Only `identityOwner(identity)` may also:
 
 - `changeOwner`
 - `addDelegate` / `revokeDelegate`
-- `setAttribute`
+- generic `setAttribute` (any key, including non-service attributes)
 
 ### Deactivate
 

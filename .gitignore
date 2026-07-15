@@ -7,9 +7,10 @@ coverage/
 .env
 .env.*
 !.env.example
+.mnemonic.local
 *.log
 deployments/
-!.env.example
-*.log
 .peranto/
 .DS_Store
+packages/extension/*.zip
+packages/extension/dist/

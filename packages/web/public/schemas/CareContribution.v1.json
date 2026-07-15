@@ -1,0 +1,16 @@
+{
+  "$id": "peranto:CareContribution:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CareContribution",
+  "type": "object",
+  "required": ["kind", "contributedAt"],
+  "properties": {
+    "kind": { "type": "string" },
+    "description": { "type": "string" },
+    "hours": { "type": "number" },
+    "beneficiary": { "type": "string" },
+    "contributedAt": { "type": "string", "format": "date-time" },
+    "node": { "type": "string" }
+  },
+  "additionalProperties": true
+}

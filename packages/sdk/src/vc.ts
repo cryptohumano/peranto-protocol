@@ -1,10 +1,4 @@
 import {
-  SignJWT,
-  compactVerify,
-  importJWK,
-  type JWK,
-} from "jose";
-import {
   type Address,
   type Hex,
   hexToBytes,
@@ -14,6 +8,7 @@ import {
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { secp256k1 } from "@noble/curves/secp256k1";
+import { sha256 } from "@noble/hashes/sha256";
 import { formatDid, parseDid, type PerantoNetwork } from "./did";
 
 export type EcoTestClaims = {
@@ -34,48 +29,106 @@ export type IssuedCredential = {
   payload: Record<string, unknown>;
 };
 
-function privateKeyToJwk(privateKey: Hex): JWK {
-  const account = privateKeyToAccount(privateKey);
+/** RFC 4648 base64url — no usar Buffer("base64url"): el polyfill del browser no lo soporta. */
+function bytesToBase64Url(bytes: Uint8Array): string {
+  let binary = "";
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]!);
+  }
+  const b64 =
+    typeof btoa === "function"
+      ? btoa(binary)
+      : Buffer.from(bytes).toString("base64");
+  return b64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function base64UrlToBytes(s: string): Uint8Array {
+  const padded =
+    s.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((s.length + 3) % 4);
+  if (typeof atob === "function") {
+    const binary = atob(padded);
+    const out = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+      out[i] = binary.charCodeAt(i);
+    }
+    return out;
+  }
+  return new Uint8Array(Buffer.from(padded, "base64"));
+}
+
+function utf8ToBase64Url(obj: unknown): string {
+  return bytesToBase64Url(new TextEncoder().encode(JSON.stringify(obj)));
+}
+
+/**
+ * JWT ES256K sin `jose` — WebCrypto/extension no soporta secp256k1.
+ * Firma SHA-256(header.payload) con secp256k1 compact (r||s).
+ */
+function signEs256kJwt(
+  privateKey: Hex,
+  payload: Record<string, unknown>
+): string {
+  const header = { alg: "ES256K", typ: "JWT" };
+  const h = utf8ToBase64Url(header);
+  const p = utf8ToBase64Url(payload);
+  const signingInput = new TextEncoder().encode(`${h}.${p}`);
+  const msgHash = sha256(signingInput);
+  const sig = secp256k1.sign(msgHash, hexToBytes(privateKey)).normalizeS();
+  const compact = sig.toCompactRawBytes();
+  return `${h}.${p}.${bytesToBase64Url(compact)}`;
+}
+
+function publicJwkFromPrivate(privateKey: Hex) {
   const priv = hexToBytes(privateKey);
   const pub = secp256k1.getPublicKey(priv, false);
-  // uncompressed: 0x04 || x(32) || y(32)
-  const x = pub.slice(1, 33);
-  const y = pub.slice(33, 65);
   return {
-    kty: "EC",
+    kty: "EC" as const,
     crv: "secp256k1",
-    d: Buffer.from(priv).toString("base64url"),
-    x: Buffer.from(x).toString("base64url"),
-    y: Buffer.from(y).toString("base64url"),
+    x: bytesToBase64Url(pub.slice(1, 33)),
+    y: bytesToBase64Url(pub.slice(33, 65)),
     alg: "ES256K",
   };
 }
 
-function publicJwkFromPrivate(privateKey: Hex): JWK {
-  const jwk = privateKeyToJwk(privateKey);
-  const { d: _d, ...pub } = jwk;
-  return pub;
-}
+export type MemberClaims = {
+  fullName: string;
+  status: string;
+  enrolledAt: string;
+  channel?: string;
+  photoUri?: string;
+  photoHash?: string;
+  age?: number | string;
+  occupation?: string;
+  municipality?: string;
+  activities?: string | string[];
+  phone?: string;
+  contributionHint?: string | number;
+};
 
-export async function issueEcoTestCredential(params: {
+/** Generic JWT-VC (ES256K). Use for Member, CommonsWork, Care, or arbitrary schemas. */
+export async function issueJwtCredential(params: {
   issuerPrivateKey: Hex;
   network: PerantoNetwork;
   subjectAddress: Address;
-  claims: EcoTestClaims;
-  schemaKey?: string;
+  claims: Record<string, unknown>;
+  schemaKey: string;
+  credentialType?: string;
   credentialStatus?: {
     contractAddress: Address;
     chainId: number;
   };
 }): Promise<IssuedCredential> {
-  const schemaKey = params.schemaKey ?? "peranto:EcoTestResult:v1";
+  const schemaKey = params.schemaKey;
+  const typeName =
+    params.credentialType ??
+    (schemaKey.includes(":") ? schemaKey.split(":")[1]! : "Credential");
   const issuer = privateKeyToAccount(params.issuerPrivateKey);
   const issuerDid = formatDid(params.network, issuer.address);
   const subjectDid = formatDid(params.network, params.subjectAddress);
 
   const vc: Record<string, unknown> = {
     "@context": ["https://www.w3.org/2018/credentials/v1"],
-    type: ["VerifiableCredential", "EcoTestResult"],
+    type: ["VerifiableCredential", typeName],
     issuer: issuerDid,
     issuanceDate: new Date().toISOString(),
     credentialSubject: {
@@ -97,14 +150,15 @@ export async function issueEcoTestCredential(params: {
     };
   }
 
-  const key = await importJWK(privateKeyToJwk(params.issuerPrivateKey), "ES256K");
-  const jwt = await new SignJWT({ vc })
-    .setProtectedHeader({ alg: "ES256K", typ: "JWT" })
-    .setIssuer(issuerDid)
-    .setSubject(subjectDid)
-    .setIssuedAt()
-    .sign(key);
+  const now = Math.floor(Date.now() / 1000);
+  const jwtPayload = {
+    iss: issuerDid,
+    sub: subjectDid,
+    iat: now,
+    vc,
+  };
 
+  const jwt = signEs256kJwt(params.issuerPrivateKey, jwtPayload);
   const credHash = keccak256(toBytes(jwt));
   return {
     jwt,
@@ -114,6 +168,43 @@ export async function issueEcoTestCredential(params: {
     schemaKey,
     payload: vc,
   };
+}
+
+export async function issueEcoTestCredential(params: {
+  issuerPrivateKey: Hex;
+  network: PerantoNetwork;
+  subjectAddress: Address;
+  claims: EcoTestClaims;
+  schemaKey?: string;
+  credentialStatus?: {
+    contractAddress: Address;
+    chainId: number;
+  };
+}): Promise<IssuedCredential> {
+  return issueJwtCredential({
+    ...params,
+    claims: params.claims as unknown as Record<string, unknown>,
+    schemaKey: params.schemaKey ?? "peranto:EcoTestResult:v1",
+    credentialType: "EcoTestResult",
+  });
+}
+
+export async function issueMemberCredential(params: {
+  issuerPrivateKey: Hex;
+  network: PerantoNetwork;
+  subjectAddress: Address;
+  claims: MemberClaims;
+  credentialStatus?: {
+    contractAddress: Address;
+    chainId: number;
+  };
+}): Promise<IssuedCredential> {
+  return issueJwtCredential({
+    ...params,
+    claims: params.claims as unknown as Record<string, unknown>,
+    schemaKey: "peranto:Member:v1",
+    credentialType: "Member",
+  });
 }
 
 export async function verifyEcoTestJwt(
@@ -128,9 +219,9 @@ export async function verifyEcoTestJwt(
   error?: string;
 }> {
   try {
-    const [headerB64] = jwt.split(".");
+    const [headerB64, payloadB64] = jwt.split(".");
     const header = JSON.parse(
-      Buffer.from(headerB64, "base64url").toString("utf8")
+      new TextDecoder().decode(base64UrlToBytes(headerB64!))
     ) as { alg?: string };
     if (header.alg !== "ES256K") {
       return {
@@ -143,10 +234,8 @@ export async function verifyEcoTestJwt(
       };
     }
 
-    // Decode payload first to get issuer DID → recover expected address
-    const payloadB64 = jwt.split(".")[1];
     const payload = JSON.parse(
-      Buffer.from(payloadB64, "base64url").toString("utf8")
+      new TextDecoder().decode(base64UrlToBytes(payloadB64!))
     ) as {
       iss?: string;
       sub?: string;
@@ -158,16 +247,14 @@ export async function verifyEcoTestJwt(
     }
 
     const { address: issuerAddress } = parseDid(payload.iss);
-    if (expectedIssuerAddress && issuerAddress.toLowerCase() !== expectedIssuerAddress.toLowerCase()) {
+    if (
+      expectedIssuerAddress &&
+      issuerAddress.toLowerCase() !== expectedIssuerAddress.toLowerCase()
+    ) {
       return emptyFail("Issuer address mismatch");
     }
 
-    // Build JWK from... we need the public key. For ES256K with DID, verify by
-    // recovering is harder with jose alone. Re-sign path: extract x,y from signature recovery
-    // Simpler approach for MVP: verify JWT structure + recover address via personal techniques.
-    // We'll use compactVerify with a public JWK derived if we can recover from signature.
-
-    const verified = await verifyEs256kAgainstAddress(jwt, issuerAddress);
+    const verified = verifyEs256kAgainstAddress(jwt, issuerAddress);
     if (!verified) {
       return emptyFail("Signature verification failed");
     }
@@ -188,6 +275,52 @@ function isLikelyDid(s: string): boolean {
   return s.startsWith("did:peranto:");
 }
 
+/**
+ * Decode JWT payload without verifying the signature (for vault UI display).
+ * Claims live in `vc.credentialSubject`.
+ */
+export function peekJwtClaims(jwt: string): {
+  ok: boolean;
+  issuerDid?: string;
+  subjectDid?: string;
+  schemaKey?: string;
+  types?: string[];
+  claims: Record<string, unknown>;
+  error?: string;
+} {
+  try {
+    const parts = jwt.split(".");
+    if (parts.length < 2) return { ok: false, claims: {}, error: "JWT malformado" };
+    const payload = JSON.parse(
+      new TextDecoder().decode(base64UrlToBytes(parts[1]!))
+    ) as {
+      iss?: string;
+      sub?: string;
+      vc?: {
+        type?: string[];
+        credentialSchema?: { id?: string };
+        credentialSubject?: Record<string, unknown>;
+      };
+    };
+    const subject = { ...(payload.vc?.credentialSubject ?? {}) };
+    delete subject.id;
+    return {
+      ok: true,
+      issuerDid: payload.iss,
+      subjectDid: payload.sub,
+      schemaKey: payload.vc?.credentialSchema?.id,
+      types: payload.vc?.type,
+      claims: subject,
+    };
+  } catch (e) {
+    return {
+      ok: false,
+      claims: {},
+      error: e instanceof Error ? e.message : String(e),
+    };
+  }
+}
+
 function emptyFail(error: string) {
   return {
     valid: false,
@@ -200,57 +333,38 @@ function emptyFail(error: string) {
 }
 
 /**
- * Verify ES256K JWT and check recovered/public key maps to issuer address.
- * Uses jose compactVerify after reconstructing public key from the JWT signature (r,s)
- * via ECDSA public key recovery over the signing input hash.
+ * Verifica ES256K recuperando la pubkey desde (r,s) y comprobando la address del issuer.
+ * No usa jose/WebCrypto (incompatibles con secp256k1 en extensión).
  */
-async function verifyEs256kAgainstAddress(
-  jwt: string,
-  expected: Address
-): Promise<boolean> {
+function verifyEs256kAgainstAddress(jwt: string, expected: Address): boolean {
   const [h, p, s] = jwt.split(".");
   if (!h || !p || !s) return false;
 
   const signingInput = new TextEncoder().encode(`${h}.${p}`);
-  const hash = keccak256(signingInput);
-  // JWT ES256K uses SHA-256 of signing input, not keccak — jose/ES256K is SHA-256
-  const { sha256 } = await import("@noble/hashes/sha256");
   const msgHash = sha256(signingInput);
 
-  const sigBytes = Buffer.from(s, "base64url");
+  const sigBytes = base64UrlToBytes(s);
   if (sigBytes.length !== 64) return false;
-  const r = sigBytes.subarray(0, 32);
-  const ss = sigBytes.subarray(32, 64);
+  const compact = sigBytes;
 
   for (const recovery of [0, 1]) {
     try {
-      const sig = secp256k1.Signature.fromCompact(Buffer.concat([r, ss])).addRecoveryBit(
+      const sig = secp256k1.Signature.fromCompact(compact).addRecoveryBit(
         recovery
       );
       const pub = sig.recoverPublicKey(msgHash).toRawBytes(false);
       const addrHash = keccak256(pub.slice(1));
       const addr = ("0x" + addrHash.slice(-40)) as Address;
       if (addr.toLowerCase() === expected.toLowerCase()) {
-        const x = pub.slice(1, 33);
-        const y = pub.slice(33, 65);
-        const jwk: JWK = {
-          kty: "EC",
-          crv: "secp256k1",
-          x: Buffer.from(x).toString("base64url"),
-          y: Buffer.from(y).toString("base64url"),
-          alg: "ES256K",
-        };
-        const key = await importJWK(jwk, "ES256K");
-        await compactVerify(jwt, key);
-        return true;
+        // También valida que la firma verifica contra esa pubkey
+        if (secp256k1.verify(compact, msgHash, pub)) {
+          return true;
+        }
       }
     } catch {
       // try next recovery id
     }
   }
-
-  // silence unused
-  void hash;
   return false;
 }
 

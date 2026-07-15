@@ -1,0 +1,478 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Aura Wallet</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="shell">
+      <header class="top">
+        <div class="brand">
+          <span class="mark" aria-hidden="true"></span>
+          <div>
+            <h1>Aura</h1>
+            <p class="tag">did:peranto · EcoTest · DisCO</p>
+          </div>
+        </div>
+        <div class="network-pill" id="network-pill">paseo</div>
+      </header>
+
+      <!-- Backup obligatorio al crear wallet -->
+      <aside class="backup" id="backup-panel" hidden>
+        <h2>Guarda tu respaldo</h2>
+        <p class="hint warn-text">
+          Escribe o copia el mnemonic y la clave privada. Sin ellos no hay
+          recuperación. Ambos ya quedaron guardados en esta extensión.
+        </p>
+        <label>
+          Mnemonic BIP39
+          <textarea id="backup-mnemonic" rows="3" readonly></textarea>
+        </label>
+        <div class="row">
+          <button type="button" class="btn tiny" id="btn-copy-mnemonic">
+            Copiar mnemonic
+          </button>
+        </div>
+        <label>
+          Clave privada EVM (secp256k1 / PVM)
+          <input type="text" id="backup-pk" readonly />
+        </label>
+        <div class="row">
+          <button type="button" class="btn tiny" id="btn-copy-pk">
+            Copiar PK
+          </button>
+        </div>
+        <label class="check">
+          <input type="checkbox" id="backup-ack" />
+          He guardado el mnemonic y la clave privada en un lugar seguro
+        </label>
+        <button type="button" class="btn primary" id="btn-backup-done" disabled>
+          Continuar
+        </button>
+      </aside>
+
+      <section class="identity-bar" id="identity-bar">
+        <p class="muted">Sin identidad. Crea o importa una clave.</p>
+      </section>
+
+      <nav class="tabs" role="tablist">
+        <button class="tab active" data-tab="home" type="button">Inicio</button>
+        <button class="tab" data-tab="sign" type="button">Firmar</button>
+        <button class="tab" data-tab="vc" type="button">VCs</button>
+        <button class="tab" data-tab="disco" type="button">DisCO</button>
+        <button class="tab" data-tab="names" type="button">Nombres</button>
+        <button class="tab" data-tab="settings" type="button">Red</button>
+      </nav>
+
+      <main>
+        <!-- INICIO -->
+        <section class="panel active" id="panel-home">
+          <div class="card-block">
+            <h2>Identidad</h2>
+            <p class="hint">
+              Crear genera mnemonic BIP39 → secp256k1 (EVM/PVM) + sr25519 +
+              ed25519 (Substrate).
+            </p>
+            <div class="row">
+              <button type="button" class="btn primary" id="btn-create-did">
+                Crear wallet
+              </button>
+              <button type="button" class="btn" id="btn-import-toggle">
+                Importar
+              </button>
+            </div>
+            <div class="collapse" id="import-box" hidden>
+              <label>
+                Mnemonic BIP39 (recomendado)
+                <textarea
+                  id="import-mnemonic"
+                  rows="2"
+                  placeholder="twelve words …"
+                ></textarea>
+              </label>
+              <button type="button" class="btn primary" id="btn-import-mnemonic">
+                Importar mnemonic
+              </button>
+              <label>
+                Solo clave EVM (sin Substrate)
+                <input
+                  type="password"
+                  id="import-key"
+                  placeholder="0x…"
+                  autocomplete="off"
+                />
+              </label>
+              <button type="button" class="btn" id="btn-import-did">
+                Importar clave EVM
+              </button>
+            </div>
+            <button type="button" class="btn danger ghost" id="btn-clear-did">
+              Borrar identidad local
+            </button>
+            <button type="button" class="btn ghost" id="btn-reveal-secrets" hidden>
+              Ver mnemonic / PK guardados
+            </button>
+          </div>
+
+          <div class="card-block">
+            <h2>Resolver DID</h2>
+            <label>
+              DID
+              <input type="text" id="resolve-did" placeholder="did:peranto:…" />
+            </label>
+            <button type="button" class="btn" data-action="did.resolve">
+              Resolver
+            </button>
+          </div>
+
+          <div class="card-block">
+            <h2>Attester (lab)</h2>
+            <label>
+              Schema
+              <input
+                type="text"
+                id="attester-schema"
+                value="peranto:EcoTestResult:v1"
+              />
+            </label>
+            <div class="row">
+              <button type="button" class="btn primary" data-action="attester.join">
+                stakeAndJoin
+              </button>
+              <button type="button" class="btn" data-action="attester.isAuthorized">
+                ¿Autorizado?
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <!-- FIRMAR -->
+        <section class="panel" id="panel-sign">
+          <div class="card-block">
+            <h2>Direcciones</h2>
+            <button type="button" class="btn" data-action="wallet.addresses">
+              Mostrar claves / mapeos
+            </button>
+            <pre class="mono tiny" id="sign-addresses"></pre>
+          </div>
+          <div class="card-block">
+            <h2>Firmar mensaje / payload</h2>
+            <label>
+              Esquema
+              <select id="sign-scheme">
+                <option value="secp256k1">secp256k1 — EVM / PVM eth-rpc (EIP-191)</option>
+                <option value="sr25519">sr25519 — Substrate nativo</option>
+                <option value="ed25519">ed25519 — Substrate</option>
+              </select>
+            </label>
+            <label>
+              Encoding
+              <select id="sign-encoding">
+                <option value="utf8">utf8 (texto)</option>
+                <option value="hex">hex (bytes / extrinsic payload)</option>
+              </select>
+            </label>
+            <label>
+              Mensaje o payload
+              <textarea
+                id="sign-message"
+                rows="3"
+                placeholder="texto o 0x… payload"
+              ></textarea>
+            </label>
+            <button type="button" class="btn primary" data-action="sign.payload">
+              Firmar
+            </button>
+          </div>
+          <div class="card-block">
+            <h2>Extrinsic Substrate</h2>
+            <p class="hint">
+              Pega el payload hex ya construido (txwrapper / polkadot-api). Aura
+              solo firma.
+            </p>
+            <label>
+              Esquema
+              <select id="ext-scheme">
+                <option value="sr25519">sr25519</option>
+                <option value="ed25519">ed25519</option>
+              </select>
+            </label>
+            <label>
+              payloadHex
+              <textarea id="ext-payload" rows="2" placeholder="0x…"></textarea>
+            </label>
+            <button type="button" class="btn primary" data-action="sign.extrinsic">
+              Firmar extrinsic
+            </button>
+          </div>
+          <div class="card-block">
+            <h2>Verificar firma</h2>
+            <label>
+              Esquema
+              <select id="verify-scheme">
+                <option value="secp256k1">secp256k1</option>
+                <option value="sr25519">sr25519</option>
+                <option value="ed25519">ed25519</option>
+              </select>
+            </label>
+            <label>
+              Mensaje
+              <textarea id="verify-message" rows="2"></textarea>
+            </label>
+            <label>
+              Firma
+              <input type="text" id="verify-sig" placeholder="0x…" />
+            </label>
+            <label>
+              Address / pubkey
+              <input type="text" id="verify-addr" placeholder="0x… o 5…" />
+            </label>
+            <button type="button" class="btn" data-action="sign.verify">
+              Verificar
+            </button>
+          </div>
+        </section>
+
+        <!-- VCs -->
+        <section class="panel" id="panel-vc">
+          <div class="card-block">
+            <h2>Emitir EcoTest</h2>
+            <label>
+              Subject (address)
+              <input type="text" id="vc-subject" placeholder="0x…" />
+            </label>
+            <div class="grid-2">
+              <label>
+                Sample
+                <input type="text" id="vc-sample" value="S-001" />
+              </label>
+              <label>
+                Tipo
+                <input type="text" id="vc-type" value="pH" />
+              </label>
+              <label>
+                Resultado
+                <input type="text" id="vc-result" value="7.2" />
+              </label>
+              <label>
+                Unidad
+                <input type="text" id="vc-unit" value="pH" />
+              </label>
+            </div>
+            <label>
+              Lab
+              <input type="text" id="vc-lab" value="EcoLab" />
+            </label>
+            <button type="button" class="btn primary" data-action="vc.issue">
+              Issue + anchor
+            </button>
+          </div>
+
+          <div class="card-block">
+            <h2>Verificar / importar</h2>
+            <label>
+              JWT
+              <textarea id="vc-jwt" rows="3" placeholder="eyJ…"></textarea>
+            </label>
+            <div class="row">
+              <button type="button" class="btn primary" data-action="vc.verify">
+                Verificar
+              </button>
+              <button type="button" class="btn" data-action="vc.import">
+                Guardar en vault
+              </button>
+            </div>
+          </div>
+
+          <div class="card-block">
+            <h2>Revocar</h2>
+            <label>
+              credHash
+              <input type="text" id="vc-revoke-hash" placeholder="0x…" />
+            </label>
+            <label>
+              Motivo
+              <input type="text" id="vc-revoke-reason" value="revoked" />
+            </label>
+            <button type="button" class="btn danger" data-action="vc.revoke">
+              Revocar on-chain
+            </button>
+          </div>
+
+          <div class="card-block">
+            <h2>Vault local</h2>
+            <div id="vault-list" class="vault"></div>
+          </div>
+        </section>
+
+        <!-- DisCO -->
+        <section class="panel" id="panel-disco">
+          <div class="card-block">
+            <h2>Crear nodo</h2>
+            <label>
+              Nombre
+              <input type="text" id="disco-name" placeholder="EcoLab Norte" />
+            </label>
+            <button type="button" class="btn primary" data-action="disco.create">
+              createNode
+            </button>
+            <p class="hint" id="known-nodes"></p>
+          </div>
+
+          <div class="card-block">
+            <h2>Tip (Love / Care)</h2>
+            <label>
+              Nodo
+              <input type="text" id="tip-node" placeholder="0x nodo…" />
+            </label>
+            <label>
+              Receptor
+              <input type="text" id="tip-to" placeholder="0x…" />
+            </label>
+            <label>
+              Valor (ether o wei)
+              <input type="text" id="tip-value" value="0.01" />
+            </label>
+            <button type="button" class="btn primary" data-action="disco.tip">
+              Tip
+            </button>
+          </div>
+
+          <div class="card-block">
+            <h2>Contribute · Harvest · Distribute</h2>
+            <label>
+              Nodo
+              <input type="text" id="eco-node" placeholder="0x nodo…" />
+            </label>
+            <label>
+              Valor contribute
+              <input type="text" id="eco-value" value="0.1" />
+            </label>
+            <label>
+              periodId
+              <input type="text" id="eco-period" value="0" />
+            </label>
+            <div class="row wrap">
+              <button type="button" class="btn" data-action="disco.contribute">
+                Contribute
+              </button>
+              <button type="button" class="btn" data-action="disco.harvest">
+                Harvest
+              </button>
+              <button type="button" class="btn" data-action="disco.distribute">
+                Distribute
+              </button>
+            </div>
+          </div>
+
+          <div class="card-block">
+            <h2>Scores · Miembro</h2>
+            <label>
+              Nodo
+              <input type="text" id="score-node" placeholder="0x…" />
+            </label>
+            <label>
+              Cuenta
+              <input type="text" id="score-account" placeholder="0x…" />
+            </label>
+            <div class="row">
+              <button type="button" class="btn" data-action="disco.scores">
+                Ver scores
+              </button>
+              <button type="button" class="btn" data-action="disco.member.add">
+                addMember
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <!-- Nombres -->
+        <section class="panel" id="panel-names">
+          <div class="card-block">
+            <h2>Registrar nombre</h2>
+            <label>
+              Label
+              <input type="text" id="name-label" placeholder="ecolab" />
+            </label>
+            <button type="button" class="btn primary" data-action="name.register">
+              Registrar
+            </button>
+          </div>
+          <div class="card-block">
+            <h2>Resolver nombre</h2>
+            <label>
+              Label
+              <input type="text" id="name-resolve" placeholder="ecolab" />
+            </label>
+            <button type="button" class="btn" data-action="name.resolve">
+              Resolver
+            </button>
+          </div>
+        </section>
+
+        <!-- Settings -->
+        <section class="panel" id="panel-settings">
+          <div class="card-block">
+            <h2>Red</h2>
+            <label>
+              Network
+              <select id="settings-network">
+                <option value="paseo">paseo (Hub TestNet)</option>
+                <option value="hardhat">hardhat / localhost</option>
+                <option value="baseSepolia">baseSepolia</option>
+                <option value="base">base mainnet</option>
+                <option value="arbitrumSepolia">arbitrumSepolia</option>
+                <option value="arbitrum">arbitrum One</option>
+              </select>
+            </label>
+            <label>
+              RPC URL (EVM / eth-rpc PVM)
+              <input type="text" id="settings-rpc" />
+            </label>
+            <label>
+              Substrate WS (nativo)
+              <input
+                type="text"
+                id="settings-ws"
+                placeholder="wss://rpc.paseo.dev"
+              />
+            </label>
+            <button type="button" class="btn primary" id="btn-save-network">
+              Guardar red
+            </button>
+          </div>
+          <div class="card-block">
+            <h2>Deployment</h2>
+            <p class="hint">
+              Pega el JSON de <code>deployments/&lt;chainId&gt;.json</code> tras
+              un deploy.
+            </p>
+            <label>
+              JSON
+              <textarea id="settings-deploy" rows="6"></textarea>
+            </label>
+            <button type="button" class="btn" id="btn-import-deploy">
+              Importar contratos
+            </button>
+            <button type="button" class="btn" data-action="rpc.ping">
+              Probar RPC / contratos
+            </button>
+            <pre class="mono tiny" id="settings-addresses"></pre>
+          </div>
+        </section>
+      </main>
+
+      <footer class="status" id="status" aria-live="polite"></footer>
+      <pre class="output" id="output" hidden></pre>
+    </div>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

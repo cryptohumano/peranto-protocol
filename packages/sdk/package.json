@@ -11,6 +11,11 @@
   "dependencies": {
     "@noble/curves": "^1.8.0",
     "@noble/hashes": "^1.7.0",
+    "@polkadot/keyring": "^14.0.3",
+    "@polkadot/util": "^14.0.3",
+    "@polkadot/util-crypto": "^14.0.3",
+    "@scure/bip32": "^1.7.0",
+    "@scure/bip39": "^1.6.0",
     "jose": "^5.9.6",
     "viem": "^2.21.54"
   },

@@ -39,6 +39,25 @@ export const didRegistryAbi = [
     inputs: [{ name: "identity", type: "address" }],
     outputs: [],
   },
+  {
+    type: "event",
+    name: "DIDAttributeChanged",
+    inputs: [
+      { name: "identity", type: "address", indexed: true },
+      { name: "name", type: "bytes32", indexed: false },
+      { name: "value", type: "bytes", indexed: false },
+      { name: "validTo", type: "uint256", indexed: false },
+      { name: "previousChange", type: "uint256", indexed: false },
+    ],
+  },
+  {
+    type: "event",
+    name: "DIDDeactivated",
+    inputs: [
+      { name: "identity", type: "address", indexed: true },
+      { name: "previousChange", type: "uint256", indexed: false },
+    ],
+  },
 ] as const;
 
 export const schemaRegistryAbi = [
@@ -162,6 +181,25 @@ export const credentialStatusAbi = [
     inputs: [],
     outputs: [{ type: "uint256" }],
   },
+  {
+    type: "event",
+    name: "CredentialAnchored",
+    inputs: [
+      { name: "credHash", type: "bytes32", indexed: true },
+      { name: "schemaId", type: "bytes32", indexed: true },
+      { name: "attester", type: "address", indexed: true },
+      { name: "subject", type: "address", indexed: false },
+    ],
+  },
+  {
+    type: "event",
+    name: "CredentialRevoked",
+    inputs: [
+      { name: "credHash", type: "bytes32", indexed: true },
+      { name: "attester", type: "address", indexed: true },
+      { name: "reason", type: "string", indexed: false },
+    ],
+  },
 ] as const;
 
 export const nameRegistryAbi = [
@@ -209,5 +247,430 @@ export const nameRegistryAbi = [
     stateMutability: "nonpayable",
     inputs: [{ name: "label", type: "string" }],
     outputs: [],
+  },
+  {
+    type: "function",
+    name: "primaryLabelOf",
+    stateMutability: "view",
+    inputs: [{ name: "owner", type: "address" }],
+    outputs: [{ type: "bytes32" }],
+  },
+  {
+    type: "event",
+    name: "NameRegistered",
+    inputs: [
+      { name: "labelHash", type: "bytes32", indexed: true },
+      { name: "label", type: "string", indexed: false },
+      { name: "owner", type: "address", indexed: true },
+    ],
+  },
+  {
+    type: "event",
+    name: "NameReleased",
+    inputs: [
+      { name: "labelHash", type: "bytes32", indexed: true },
+      { name: "previousOwner", type: "address", indexed: true },
+    ],
+  },
+  {
+    type: "event",
+    name: "NameTransferred",
+    inputs: [
+      { name: "labelHash", type: "bytes32", indexed: true },
+      { name: "from", type: "address", indexed: true },
+      { name: "to", type: "address", indexed: true },
+    ],
+  },
+] as const;
+
+export const protocolTreasuryAbi = [
+  {
+    type: "function",
+    name: "distribute",
+    stateMutability: "nonpayable",
+    inputs: [{ name: "periodId", type: "uint256" }],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "isNode",
+    stateMutability: "view",
+    inputs: [{ name: "node", type: "address" }],
+    outputs: [{ type: "bool" }],
+  },
+  {
+    type: "function",
+    name: "nodeCount",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "getNodes",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "address[]" }],
+  },
+  {
+    type: "function",
+    name: "distributed",
+    stateMutability: "view",
+    inputs: [{ name: "periodId", type: "uint256" }],
+    outputs: [{ type: "bool" }],
+  },
+  {
+    type: "function",
+    name: "equalBps",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "weightBps",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "governance",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "address" }],
+  },
+  {
+    type: "function",
+    name: "removeNode",
+    stateMutability: "nonpayable",
+    inputs: [{ name: "node", type: "address" }],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "selfUnregister",
+    stateMutability: "nonpayable",
+    inputs: [],
+    outputs: [],
+  },
+  {
+    type: "event",
+    name: "NodeRemoved",
+    inputs: [{ name: "node", type: "address", indexed: true }],
+  },
+  {
+    type: "event",
+    name: "Deposited",
+    inputs: [
+      { name: "from", type: "address", indexed: true },
+      { name: "amount", type: "uint256", indexed: false },
+    ],
+  },
+  {
+    type: "event",
+    name: "Distributed",
+    inputs: [
+      { name: "periodId", type: "uint256", indexed: true },
+      { name: "total", type: "uint256", indexed: false },
+      { name: "nodeCount", type: "uint256", indexed: false },
+    ],
+  },
+] as const;
+
+export const disCOFactoryAbi = [
+  {
+    type: "function",
+    name: "createNode",
+    stateMutability: "payable",
+    inputs: [{ name: "name_", type: "string" }],
+    outputs: [{ name: "node", type: "address" }],
+  },
+  {
+    type: "function",
+    name: "createNodeWithConfig",
+    stateMutability: "payable",
+    inputs: [
+      { name: "name_", type: "string" },
+      { name: "reserveFloor_", type: "uint256" },
+    ],
+    outputs: [{ name: "node", type: "address" }],
+  },
+  {
+    type: "function",
+    name: "allNodes",
+    stateMutability: "view",
+    inputs: [{ name: "", type: "uint256" }],
+    outputs: [{ type: "address" }],
+  },
+  {
+    type: "function",
+    name: "nodeCount",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "nodeByCreator",
+    stateMutability: "view",
+    inputs: [{ name: "creator", type: "address" }],
+    outputs: [{ type: "address" }],
+  },
+  {
+    type: "function",
+    name: "periodBlocks",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "defaultReserveFloor",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "event",
+    name: "NodeCreated",
+    inputs: [
+      { name: "node", type: "address", indexed: true },
+      { name: "creator", type: "address", indexed: true },
+      { name: "name", type: "string", indexed: false },
+    ],
+  },
+  {
+    type: "event",
+    name: "NodeSeeded",
+    inputs: [
+      { name: "node", type: "address", indexed: true },
+      { name: "creator", type: "address", indexed: true },
+      { name: "amount", type: "uint256", indexed: false },
+      { name: "reserveFloor", type: "uint256", indexed: false },
+    ],
+  },
+] as const;
+
+export const disCONodeAbi = [
+  {
+    type: "function",
+    name: "tip",
+    stateMutability: "payable",
+    inputs: [{ name: "to", type: "address" }],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "contribute",
+    stateMutability: "payable",
+    inputs: [],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "harvest",
+    stateMutability: "nonpayable",
+    inputs: [{ name: "periodId", type: "uint256" }],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "recordAnchor",
+    stateMutability: "nonpayable",
+    inputs: [{ name: "credHash", type: "bytes32" }],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "addFederationLink",
+    stateMutability: "nonpayable",
+    inputs: [{ name: "otherNode", type: "address" }],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "addMember",
+    stateMutability: "nonpayable",
+    inputs: [{ name: "account", type: "address" }],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "removeMember",
+    stateMutability: "nonpayable",
+    inputs: [{ name: "account", type: "address" }],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "withdraw",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "to", type: "address" },
+      { name: "amount", type: "uint256" },
+    ],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "dissolve",
+    stateMutability: "nonpayable",
+    inputs: [{ name: "residualTo", type: "address" }],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "dissolved",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "bool" }],
+  },
+  {
+    type: "function",
+    name: "currentPeriod",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "lovePoints",
+    stateMutability: "view",
+    inputs: [{ name: "account", type: "address" }],
+    outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "carePoints",
+    stateMutability: "view",
+    inputs: [{ name: "account", type: "address" }],
+    outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "name",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "string" }],
+  },
+  {
+    type: "function",
+    name: "memberCount",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "members",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "address[]" }],
+  },
+  {
+    type: "function",
+    name: "isMember",
+    stateMutability: "view",
+    inputs: [{ name: "account", type: "address" }],
+    outputs: [{ type: "bool" }],
+  },
+  {
+    type: "function",
+    name: "governance",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "address" }],
+  },
+  {
+    type: "function",
+    name: "periodBlocks",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "createdPeriod",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "reserveFloor",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "setReserveFloor",
+    stateMutability: "nonpayable",
+    inputs: [{ name: "next", type: "uint256" }],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "sustainBpsFor",
+    stateMutability: "view",
+    inputs: [{ name: "periodId", type: "uint256" }],
+    outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "periodStats",
+    stateMutability: "view",
+    inputs: [{ name: "periodId", type: "uint256" }],
+    outputs: [
+      { name: "love", type: "uint256" },
+      { name: "care", type: "uint256" },
+      { name: "anchors", type: "uint256" },
+      { name: "federationLinks", type: "uint256" },
+      { name: "harvested", type: "bool" },
+    ],
+  },
+  {
+    type: "event",
+    name: "Tipped",
+    inputs: [
+      { name: "from", type: "address", indexed: true },
+      { name: "to", type: "address", indexed: true },
+      { name: "amount", type: "uint256", indexed: false },
+    ],
+  },
+  {
+    type: "event",
+    name: "ActivityFee",
+    inputs: [
+      { name: "from", type: "address", indexed: true },
+      { name: "toNode", type: "uint256", indexed: false },
+      { name: "toProtocol", type: "uint256", indexed: false },
+    ],
+  },
+  {
+    type: "event",
+    name: "Harvested",
+    inputs: [
+      { name: "periodId", type: "uint256", indexed: true },
+      { name: "amount", type: "uint256", indexed: false },
+      { name: "sustainBps", type: "uint256", indexed: false },
+    ],
+  },
+  {
+    type: "event",
+    name: "Dissolved",
+    inputs: [
+      { name: "residualTo", type: "address", indexed: true },
+      { name: "amount", type: "uint256", indexed: false },
+    ],
+  },
+  {
+    type: "event",
+    name: "MemberUpdated",
+    inputs: [
+      { name: "account", type: "address", indexed: true },
+      { name: "joined", type: "bool", indexed: false },
+    ],
   },
 ] as const;

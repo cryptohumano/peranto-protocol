@@ -1,0 +1,17 @@
+{
+  "$schema": "https://peranto.app/schemas/DiscoConfig/v1.json",
+  "version": 1,
+  "name": "EcoLab Demo",
+  "network": "paseo",
+  "nodeAddress": null,
+  "memberSchema": "peranto:Member:v1",
+  "claim": {
+    "requiresName": false,
+    "requiresContributeWei": "0",
+    "description": "Tras login DID, un attester emite Member.v1; el holder guarda el JWT en vault."
+  },
+  "ui": {
+    "primaryColor": "#1a5f4a",
+    "accentColor": "#c4a35a"
+  }
+}

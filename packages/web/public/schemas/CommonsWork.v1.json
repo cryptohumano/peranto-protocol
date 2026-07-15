@@ -1,0 +1,17 @@
+{
+  "$id": "peranto:CommonsWork:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CommonsWork",
+  "type": "object",
+  "required": ["title", "workedAt"],
+  "properties": {
+    "title": { "type": "string" },
+    "description": { "type": "string" },
+    "artifactUri": { "type": "string" },
+    "artifactHash": { "type": "string" },
+    "hours": { "type": "number" },
+    "workedAt": { "type": "string", "format": "date-time" },
+    "node": { "type": "string" }
+  },
+  "additionalProperties": true
+}

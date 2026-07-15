@@ -1,10 +1,10 @@
 # Protocolo Peranto — Whitepaper inicial y glosario
 
-**Estado:** borrador v0.2  
+**Estado:** borrador v0.3  
 **Fecha:** 2026-07-14  
 **Autores:** Peranto  
 
-Documento canónico de **visión y diseño aterrizado** del protocolo. Para detalle normativo del método DID, ver [did-peranto-method.md](./did-peranto-method.md). Para fees y stake, ver [tokenomics.md](./tokenomics.md). Para despliegue en Paseo, ver [paseo-deploy.md](./paseo-deploy.md).
+Documento canónico de **visión y diseño aterrizado** del protocolo (identidad SSI + núcleo económico DisCO en código). Para detalle normativo del método DID, ver [did-peranto-method.md](./did-peranto-method.md). Para fees y stake, ver [tokenomics.md](./tokenomics.md). Para despliegue en Paseo, ver [paseo-deploy.md](./paseo-deploy.md). Para **privacidad mínima y operaciones cooperativas**, ver [research-privacy-cooperatives.md](./research-privacy-cooperatives.md).
 
 ---
 
@@ -16,7 +16,7 @@ Combina:
 
 1. **Capa global on-chain** — identificadores `did:peranto`, registros (*registries*) de schemas, attesters, estado de credenciales y nombres, desplegables en EVM local y en **Paseo** (Polkadot Hub TestNet / PolkaVM vía `pallet-revive`).
 2. **Credenciales off-chain** — el contenido sensible de las VC viaja como JWT-VC firmado; la chain solo ancla hashes y estado (Active / Revoked).
-3. **Capa de nodo cooperativa (DisCO)** — opcional por organización: miembros, tesoro, fees y contabilidad de valor Livelihood / Love / Care. Diseñada aquí; implementación de contrato `DisCONode` es fase siguiente.
+3. **Capa de nodo cooperativa (DisCO)** — opcional por organización: miembros, tesoro embebido en `DisCONode`, fees 80/20, tips Love/Care, `harvest` / `distribute` vía `ProtocolTreasury`.
 
 No todo puede ser *commons*. El protocolo asume una frontera explícita entre **operaciones internas** (reproducir el colectivo) y **operaciones externas** (cliente, mercado, otras DisCOs, público).
 
@@ -76,7 +76,7 @@ flowchart TB
 |------|----------------|--------|
 | Global Peranto | Identidad, schemas, quién puede anclar, status, nombres | **Implementada** (contratos + SDK/CLI) |
 | Off-chain VC / pagos | Claims, privacidad, liquidación privada | **Implementada** (JWT-VC); pagos = fuera de protocolo |
-| Nodo DisCO | Políticas por cooperativa, tesoro, scoreboards | **Diseño aterrizado** (este documento); código pendiente |
+| Nodo DisCO | Políticas por cooperativa, tesoro, scoreboards | **Implementado** (`DisCONode` + factory + tests) |
 
 Livelihood / Love / Care **no** son tres máquinas virtuales ni tres registries globales obligatorios. Son **tipos de evidencia (schemas)** y, en el nodo, **contadores y reglas de fee**. La identidad es una sola: `did:peranto`.
 
@@ -131,42 +131,35 @@ Implementados en [`contracts/`](../contracts/):
 
 | Contrato | Función |
 |----------|---------|
-| **DIDRegistry** | Identidad estilo ERC-1056: owner, delegates, attributes, deactivate. Create **implícito** (toda address es DID). |
+| **DIDRegistry** | Identidad estilo ERC-1056: owner, delegates, attributes, deactivate. Create **implícito** (toda address es DID). Servicios DID = atributos `did/svc/<Type>`. |
 | **SchemaRegistry** | Tipos de credencial inmutables (`schemaId`, hash, URI). Solo publishers autorizados. |
 | **AttesterRegistry** | Autorización a anclar por schema vía `stakeAndJoin` (PAS/colateral) o `authorizeAttester` (gobernanza). Unbond / slash. |
 | **CredentialStatusRegistry** | `anchor` / `revoke` / `status` del hash de la VC; fee opcional enviado on-chain a `treasury`. |
-| **NameRegistry** | Alias humano (`ecolab` → address / DID). Fee de registro enviado on-chain a `treasury`. |
+| **NameRegistry** | Alias humano (`ecolab` → address / DID). Fee de registro enviado on-chain a `treasury`. `release` libera el label (fee no se reembolsa). |
 
-**Tesoro hoy vs diseño objetivo.** En el MVP, `treasury` es un `address` configurable: los fees (`anchorFee`, `registrationFee`) **ya se pagan on-chain** (`msg.value` → transferencia). Ese address puede ser una EOA (solo “caja”) o un contrato. El diseño aterrizado del protocolo exige, para nodos DisCO y para producción, un **`Treasury` / `CareTreasury` smart contract** (o el tesoro embebido en `DisCONode`) con:
-
-- recepción de native token (PAS),
-- contabilidad por origen (anchor, name, livelihood tip, love fee),
-- roles de gobernanza para `withdraw` / payouts,
-- sin custodiar el sueldo privado Livelihood (solo la fracción/tip acordada).
-
-Una EOA como treasury queda relegada a demos locales.
+**Tesoro hoy.** El deploy configura `ProtocolTreasury` como destino de `anchorFee` / `nameFee`. Cada `DisCONode` actúa como **TreasuryNodo** (saldo nativo + `withdraw` gobernado). El flujo tip → scores → canon (`harvest`) → reparto híbrido (`distribute`) está en contratos y tests.
 
 Método DID: `did:peranto:<network>:<address>` (sin prefijo `light`; el “light” de KILT es conceptualmente el DID implícito). Spec: [did-peranto-method.md](./did-peranto-method.md).
 
 ---
 
-## 8. Capa DisCONode (diseño aterrizado)
+## 8. Capa DisCONode (implementada — núcleo v0.3)
 
-**Aún no implementada en Solidity.** Diseño objetivo:
+Contratos: `DisCOFactory` → `DisCONode` + registro en `ProtocolTreasury`. El saldo del nodo es el **TreasuryNodo**; no hay ERC-20 propio.
 
-Una instancia (o factory → instancia) por cooperativa / lab / célula:
+| Capacidad | Contrato | Descripción |
+|-----------|----------|-------------|
+| **Members** | `DisCONode` | `addMember` / `removeMember` (gobernanza del nodo); creator = primer miembro |
+| **Tips** | `tip(to)` | Valor completo al receptor (o al nodo si `to == this`); Care↑ emisor, Love↑ receptor; agregados de periodo |
+| **Actividad 80/20** | `contribute()` | 80% permanece en nodo; 20% → `ProtocolTreasury` |
+| **Anchors / federación** | `recordAnchor`, `addFederationLink` | Alimentan peso \(w_i\) y `sustainBps` |
+| **Canon** | `harvest(periodId)` | `sustainBps` dinámico sobre saldo − `reserveFloor` → protocolo |
+| **Reparto** | `ProtocolTreasury.distribute` | Híbrido 50% equal + 50% weighted \(w = 5C + 3L + 1A\) |
+| **Disolución** | `DisCONode.dissolve(residualTo)` | Vacía miembros, envía saldo residual, `ProtocolTreasury.selfUnregister()`. **No** revoca anclas de VC — hay que `revoke` por hash. |
 
-| Capacidad | Descripción |
-|-----------|-------------|
-| **Members / roles** | Mapeo DID o address → Member / Attester-delegate / Care-circle, con alta/baja por política del nodo |
-| **recordExternal** | Registra un evento externo ligado a `credHash` + schema (Livelihood o Love) y aplica split de fee al tesoro si `msg.value` > 0 |
-| **recordInternal** | Registra Care u otras contribuciones internas (puede exigir attester del círculo de cuidado) |
-| **Treasury** | **Smart contract** que recibe fees on-chain; gobernanza del nodo (roles / multisig) ejecuta `withdraw` o payouts a miembros con evidencia Care/Love; registra saldos por bucket (p. ej. general / care) |
-| **Scoreboards** | Contadores por address/DID: `livelihoodPoints`, `lovePoints`, `carePoints` (unidades definidas por política del nodo) |
+Peranto se despliega como **nodo peer** (`createNode("Peranto")`) en el script de deploy.
 
-Regla de seguridad: el nodo **no inventa** evidencia sola; incrementa scores o acepta fees cuando hay ancla válida en `CredentialStatusRegistry` y/o attester autorizado para el schema correspondiente (oráculo humano = firma off-chain + ancla).
-
-Varias DisCOs = varias instancias de nodo sobre la **misma** capa global Peranto.
+Varias DisCOs = varias instancias sobre la misma capa global Peranto.
 
 ### 8.1 Sostenimiento “solo protocolo” (sin ingresos off-chain)
 
@@ -174,9 +167,9 @@ Si Peranto-organización no tiene SaaS, pilots ni grants, el protocolo se sostie
 
 Por eso el diseño aterrizado incluye:
 
-1. **Fees hacia los nodos** (`TreasuryNodo`) — la mayor parte del valor de uso.
+1. **Fees hacia los nodos** (`TreasuryNodo` embebido) — la mayor parte del valor de uso.
 2. **Acumulación temporal** en `ProtocolTreasury` — split de actividad + canon.
-3. **Redistribución periódica** del `ProtocolTreasury` **de vuelta a los `TreasuryNodo`** (no a DIDs individuales), con regla **híbrida 50/50**.
+3. **Redistribución periódica** del `ProtocolTreasury` **de vuelta a los nodos** (no a DIDs individuales), con regla **híbrida 50/50**.
 4. **Peranto** participa como **un nodo peer** (`DisCONode` Peranto), misma regla que el resto — no como dueño del peaje.
 
 El `ProtocolTreasury` no es una caja de renta perpetua: es un **commons temporal** del ecosistema que se vuelve a repartir.
@@ -327,6 +320,12 @@ Los claims detallados viven off-chain; on-chain: `schemaId` + `credHash` + subje
 |-----|----------|-------------|-----------|
 | Hardhat / localhost | `31337` | `did:peranto:hardhat:0x…` | ETH test |
 | Paseo Hub TestNet | `420420417` | `did:peranto:paseo:0x…` | PAS |
+| Base | `8453` | `did:peranto:base:0x…` | ETH |
+| Base Sepolia | `84532` | `did:peranto:baseSepolia:0x…` | ETH |
+| Arbitrum One (EVM) | `42161` | `did:peranto:arbitrum:0x…` | ETH |
+| Arbitrum Sepolia (EVM) | `421614` | `did:peranto:arbitrumSepolia:0x…` | ETH |
+
+> **Stylus:** los contratos actuales son Solidity sobre Nitro EVM. Stylus (Rust/WASM) es un runtime distinto — ver [multi-chain-deploy.md](./multi-chain-deploy.md).
 | ETH-RPC Paseo | — | — | `https://eth-rpc-testnet.polkadot.io/` |
 
 ---
@@ -336,40 +335,40 @@ Los claims detallados viven off-chain; on-chain: `schemaId` + `credHash` + subje
 | Fase | Entrega |
 |------|---------|
 | **MVP identidad (hecho en repo)** | 5 registries, SDK/CLI, JWT-VC EcoTest, tests, método DID, whitepaper |
-| **v0.2 schemas** | Registrar/usar `Member`, `CommonsWork`, `CareContribution`, `TipReceipt` + demos CLI |
-| **v0.3 economía DisCO** | `DisCONode`, `TreasuryNodo`, `ProtocolTreasury`, `tip`, `harvest`, `distribute`, `sustainBps` dinámico |
+| **v0.2 schemas** | Registrar/usar `Member`, `CommonsWork`, `CareContribution`; TipReceipt registrado en deploy |
+| **v0.3 economía DisCO (núcleo en repo)** | `DisCONode`, `ProtocolTreasury`, `DisCOFactory`, tip/contribute/harvest/distribute, SDK/CLI `disco *` |
 | **Producto** | Aura Wallet; drivers de resolve; registro opcional W3C DID Extensions |
 
 ---
 
-## 12. Fuera de alcance (v0.1 código)
+## 12. Fuera de alcance (v0.3 núcleo)
 
 - Token ERC-20 “PERANTO” propio.
 - Confianza 100 % trustless sin capa humana.
 - Claims o PII completos en storage on-chain.
 - Slash automático por disputas políticas.
 - Sustituir asambleas o derecho cooperativo local por el contrato.
-- Implementación Solidity de tips/treasuries/reparto (especificación normativa sí; código no en este MVP).
+- Payouts automáticos a DIDs individuales desde `ProtocolTreasury` (solo nodos).
+- Emisión automática de TipReceipt VC en cada tip (schema registrado; flujo CLI opcional pendiente).
 
 ---
 
 ## 13. Revisión del repo como MVP
 
-**Veredicto:** este repositorio es un **MVP de identidad descentralizada + anclas SSI** (`did:peranto`), no aún un MVP de economía DisCO completa.
+**Veredicto:** el repo cubre **identidad SSI + anclas** y el **núcleo económico DisCO** (tesoros, tips, canon, reparto). Faltan producto wallet, más schemas de membresía/care y demos Paseo end-to-end.
 
 | Área | Estado en el repo |
 |------|-------------------|
 | `DIDRegistry`, `SchemaRegistry`, `AttesterRegistry` (stake), `CredentialStatusRegistry`, `NameRegistry` | **Implementado** + tests Hardhat |
-| SDK `@peranto/sdk` + CLI (create DID, stake, issue/verify/revoke EcoTest) | **Implementado** |
-| Deploy scripts Hardhat / config Paseo | **Implementado** |
-| Schema JSON `EcoTestResult` | **Implementado** |
-| Schemas Member / CommonsWork / Care / TipReceipt | **Stub TipReceipt** + IDs en docs; no lógica de producto completa |
-| `DisCONode`, `TreasuryNodo`, `ProtocolTreasury` | **No implementado** (diseño §8–8.1) |
-| `tip()`, scoreboards Love/Care, `harvest` / `distribute`, `sustainBps` dinámico | **No implementado** (diseño §8.1) |
-| Split 80/20 y reparto híbrido 50/50 | **Normativo en docs**; fees MVP apuntan a `address treasury` genérico (EOA ok en demo) |
+| SDK `@peranto/sdk` + CLI (DID, stake, issue/verify/revoke, names) | **Implementado** |
+| Deploy scripts Hardhat / config Paseo | **Implementado** (incluye treasuries + nodo Peranto) |
+| Schema JSON `EcoTestResult` + TipReceipt | **Implementado** (stubs; TipReceipt on-chain en deploy) |
+| `DisCONode`, `ProtocolTreasury`, `DisCOFactory` | **Implementado** + tests |
+| `tip()`, scores Love/Care, `harvest` / `distribute`, `sustainBps` dinámico | **Implementado** |
+| Split 80/20 y reparto híbrido 50/50 | **Implementado** (`contribute` + `distribute`) |
+| CLI `disco create|tip|contribute|harvest|distribute|scores` | **Implementado** |
 
-Frontera operativa: se puede **demostrar** identidad, attester, ancla y revocación de una VC eco-testing en local/Paseo. La recirculación tip→reputación→canon→reparto es **especificación v0.2/v0.3** hasta que existan los contratos de nodo.
-
+Frontera operativa: se puede demostrar tip → Care/Love → contribute 80/20 → harvest → distribute en Hardhat, además del flujo SSI EcoTest.
 ---
 
 ## Apéndice A — Glosario

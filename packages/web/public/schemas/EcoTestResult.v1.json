@@ -1,0 +1,16 @@
+{
+  "$id": "peranto:EcoTestResult:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "EcoTestResult",
+  "type": "object",
+  "required": ["sampleId", "testType", "result", "unit", "labName", "testedAt"],
+  "properties": {
+    "sampleId": { "type": "string" },
+    "testType": { "type": "string" },
+    "result": { "type": ["string", "number"] },
+    "unit": { "type": "string" },
+    "labName": { "type": "string" },
+    "testedAt": { "type": "string", "format": "date-time" }
+  },
+  "additionalProperties": true
+}

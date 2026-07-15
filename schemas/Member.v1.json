@@ -1,0 +1,27 @@
+{
+  "$id": "peranto:Member:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Member",
+  "type": "object",
+  "required": ["fullName", "status", "enrolledAt"],
+  "properties": {
+    "enrolledAt": { "type": "string", "format": "date-time" },
+    "status": { "type": "string" },
+    "channel": { "type": "string" },
+    "photoUri": { "type": "string" },
+    "photoHash": { "type": "string" },
+    "fullName": { "type": "string" },
+    "age": { "type": ["integer", "string"] },
+    "occupation": { "type": "string" },
+    "municipality": { "type": "string" },
+    "activities": {
+      "oneOf": [
+        { "type": "string" },
+        { "type": "array", "items": { "type": "string" } }
+      ]
+    },
+    "phone": { "type": "string" },
+    "contributionHint": { "type": ["string", "number"] }
+  },
+  "additionalProperties": true
+}

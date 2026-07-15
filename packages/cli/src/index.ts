@@ -6,16 +6,17 @@ import {
   createIdentity,
   formatDid,
   loadDeployment,
+  parseEther,
   resolveDidMinimal,
   type PerantoNetwork,
 } from "@peranto/sdk";
-import type { Hex } from "viem";
+import type { Address, Hex } from "viem";
 
 function usage(): never {
   console.log(`peranto — did:peranto CLI
 
 Usage:
-  peranto did create [--network hardhat|paseo]
+  peranto did create [--network hardhat|paseo|base|baseSepolia|arbitrum|arbitrumSepolia]
   peranto did resolve <did>
   peranto schema register <schemaKey> <uri> --private-key <hex> [--rpc url]
   peranto attester join <schemaKey> --private-key <hex> [--stake wei]
@@ -24,9 +25,16 @@ Usage:
   peranto vc revoke <credHash> --private-key <hex> --reason <text>
   peranto name register <label> --private-key <hex>
   peranto name resolve <label>
+  peranto disco create <name> --private-key <hex>
+  peranto disco tip <node> <to> --value <wei|ether> --private-key <hex>
+  peranto disco contribute <node> --value <wei|ether> --private-key <hex>
+  peranto disco harvest <node> <periodId> --private-key <hex>
+  peranto disco distribute <periodId> --private-key <hex>
+  peranto disco scores <node> <account>
+  peranto disco member add <node> <account> --private-key <hex>
 
 Env:
-  PERANTO_NETWORK=hardhat|paseo (default hardhat)
+  PERANTO_NETWORK=hardhat|paseo|base|baseSepolia|arbitrum|arbitrumSepolia
   PERANTO_RPC_URL=
   PERANTO_KEY=0x...
 `);
@@ -44,14 +52,32 @@ function networkFrom(argv: string[]): PerantoNetwork {
     arg("--network", argv) ||
     process.env.PERANTO_NETWORK ||
     "hardhat";
-  if (n !== "hardhat" && n !== "localhost" && n !== "paseo") {
+  const allowed: PerantoNetwork[] = [
+    "hardhat",
+    "localhost",
+    "paseo",
+    "base",
+    "baseSepolia",
+    "arbitrum",
+    "arbitrumSepolia",
+  ];
+  if (!allowed.includes(n as PerantoNetwork)) {
     throw new Error(`Unknown network ${n}`);
   }
-  return n;
+  return n as PerantoNetwork;
 }
 
 function chainIdOf(network: PerantoNetwork): number {
-  return network === "paseo" ? 420420417 : 31337;
+  const map: Record<PerantoNetwork, number> = {
+    hardhat: 31337,
+    localhost: 31337,
+    paseo: 420420417,
+    base: 8453,
+    baseSepolia: 84532,
+    arbitrum: 42161,
+    arbitrumSepolia: 421614,
+  };
+  return map[network];
 }
 
 function keyFrom(argv: string[]): Hex {
@@ -67,9 +93,15 @@ function rpcOf(network: PerantoNetwork, argv: string[]): string {
   return (
     arg("--rpc", argv) ||
     process.env.PERANTO_RPC_URL ||
-    (network === "paseo"
-      ? "https://eth-rpc-testnet.polkadot.io/"
-      : "http://127.0.0.1:8545")
+    ({
+      hardhat: "http://127.0.0.1:8545",
+      localhost: "http://127.0.0.1:8545",
+      paseo: "https://eth-rpc-testnet.polkadot.io/",
+      base: "https://mainnet.base.org",
+      baseSepolia: "https://sepolia.base.org",
+      arbitrum: "https://arb1.arbitrum.io/rpc",
+      arbitrumSepolia: "https://sepolia-rollup.arbitrum.io/rpc",
+    } as Record<PerantoNetwork, string>)[network]
   );
 }
 
@@ -230,6 +262,105 @@ async function main() {
     const c = client(argv);
     const res = await c.resolveName(label!);
     console.log(JSON.stringify(res, null, 2));
+    return;
+  }
+
+  if (cmd === "disco" && sub === "create") {
+    const name = rest[0];
+    if (!name) usage();
+    const seedRaw = arg("--seed", argv) ?? "0";
+    const floorRaw = arg("--floor", argv);
+    const seedWei = seedRaw.includes(".")
+      ? parseEther(seedRaw)
+      : BigInt(seedRaw);
+    const reserveFloor =
+      floorRaw === undefined
+        ? undefined
+        : floorRaw.includes(".")
+          ? parseEther(floorRaw)
+          : BigInt(floorRaw);
+    const c = client(argv, true);
+    const res = await c.createNode(name!, { seedWei, reserveFloor });
+    console.log(JSON.stringify(res, (_k, v) => (typeof v === "bigint" ? v.toString() : v), 2));
+    return;
+  }
+
+  if (cmd === "disco" && sub === "tip") {
+    const node = rest[0] as Address;
+    const to = rest[1] as Address;
+    const valueRaw = arg("--value", argv);
+    if (!node || !to || !valueRaw) usage();
+    const c = client(argv, true);
+    const value = valueRaw!.includes(".")
+      ? parseEther(valueRaw!)
+      : BigInt(valueRaw!);
+    const tx = await c.tip(node, to, value);
+    console.log(JSON.stringify({ tx, node, to, value: value.toString() }, null, 2));
+    return;
+  }
+
+  if (cmd === "disco" && sub === "contribute") {
+    const node = rest[0] as Address;
+    const valueRaw = arg("--value", argv);
+    if (!node || !valueRaw) usage();
+    const c = client(argv, true);
+    const value = valueRaw!.includes(".")
+      ? parseEther(valueRaw!)
+      : BigInt(valueRaw!);
+    const tx = await c.contribute(node, value);
+    console.log(JSON.stringify({ tx, node, value: value.toString() }, null, 2));
+    return;
+  }
+
+  if (cmd === "disco" && sub === "harvest") {
+    const node = rest[0] as Address;
+    const periodId = rest[1];
+    if (!node || periodId === undefined) usage();
+    const c = client(argv, true);
+    const tx = await c.harvest(node, BigInt(periodId!));
+    console.log(JSON.stringify({ tx, node, periodId }, null, 2));
+    return;
+  }
+
+  if (cmd === "disco" && sub === "distribute") {
+    const periodId = rest[0];
+    if (periodId === undefined) usage();
+    const c = client(argv, true);
+    const tx = await c.distribute(BigInt(periodId!));
+    console.log(JSON.stringify({ tx, periodId }, null, 2));
+    return;
+  }
+
+  if (cmd === "disco" && sub === "scores") {
+    const node = rest[0] as Address;
+    const account = rest[1] as Address;
+    if (!node || !account) usage();
+    const c = client(argv);
+    const res = await c.scores(node, account);
+    console.log(
+      JSON.stringify(
+        {
+          node,
+          account,
+          love: res.love.toString(),
+          care: res.care.toString(),
+          currentPeriod: res.currentPeriod.toString(),
+        },
+        null,
+        2
+      )
+    );
+    return;
+  }
+
+  if (cmd === "disco" && sub === "member") {
+    const action = rest[0];
+    const node = rest[1] as Address;
+    const account = rest[2] as Address;
+    if (action !== "add" || !node || !account) usage();
+    const c = client(argv, true);
+    const tx = await c.addMember(node, account);
+    console.log(JSON.stringify({ tx, node, account }, null, 2));
     return;
   }
 
