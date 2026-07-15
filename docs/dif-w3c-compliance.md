@@ -1,7 +1,8 @@
 # Camino a compliance W3C + DIF (did:peranto)
 
 Spec del método: [did-peranto-method.md](./did-peranto-method.md) **v0.1**.  
-Driver: `packages/uni-resolver-driver-did-peranto`.
+Driver: `packages/uni-resolver-driver-did-peranto`.  
+Borradores de PR externos: [external-prs-draft.md](./external-prs-draft.md).
 
 ## Qué ya cubre la spec v0.1
 
