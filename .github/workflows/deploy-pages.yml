@@ -25,6 +25,8 @@ jobs:
           cache: npm
       - name: Install
         run: npm ci
+      - name: Build SDK types
+        run: npm run build -w @peranto/sdk
       - name: Build portal
         env:
           VITE_BASE: /peranto-protocol/

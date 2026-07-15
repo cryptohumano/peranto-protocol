@@ -60,6 +60,7 @@ npm run cli -- disco scores 0xNode... 0xAccount...
 | `docs/protocolo-peranto.md` | Whitepaper + glosario |
 | `docs/tokenomics.md` | PAS stake / fees / tips / reparto |
 | `docs/tokenomics-scenarios.md` | Escenarios demo Love/Care/livelihood/stake |
+| `docs/tokenomics-smoke-sim.md` | Corrida smoke real + proyección epoch |
 | `docs/paseo-deploy.md` | Deploy checklist for Paseo |
 | `docs/disco-config.example.json` | Config UI cooperativa |
 | `schemas/` | EcoTest, TipReceipt, Member, CommonsWork, Care |
