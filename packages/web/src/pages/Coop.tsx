@@ -38,7 +38,7 @@ export function CoopPage() {
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<Address | "">("");
   const [members, setMembers] = useState<Address[]>([]);
-  const [nodeName, setNodeName] = useState("EcoLab");
+  const [nodeName, setNodeName] = useState("EcosystemLab");
   const [seedAmt, setSeedAmt] = useState("0.1");
   const [reserveFloor, setReserveFloor] = useState("0");
   const [tipTo, setTipTo] = useState("");

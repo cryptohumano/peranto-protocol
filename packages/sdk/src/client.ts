@@ -42,6 +42,7 @@ import {
   schemaIdFromKey,
   serviceAttributeName,
   serviceAttrKeyFromAttributeName,
+  serviceSlotFromAttributeName,
   serviceTypeFromAttributeName,
   type DidDocument,
   type DidService,
@@ -69,6 +70,7 @@ export type ContractAddresses = {
   ProtocolTreasury?: Address;
   DisCOFactory?: Address;
   PerantoNode?: Address | null;
+  EcosystemLabNode?: Address | null;
 };
 
 const paseoChain = {
@@ -153,8 +155,8 @@ export class PerantoClient {
   }
 
   /**
-   * Rebuild active DID services from recent `DIDAttributeChanged` events
-   * (`did/svc/<Type>` keys). Limited by RPC lookback window.
+   * Rebuild active DID services from `DIDAttributeChanged` events
+   * (`did/svc/<Type>` keys). Uses a wide lookback — Paseo RPCs reject genesis queries.
    */
   async collectDidServices(did: string, identity: Address): Promise<DidService[]> {
     const logs = await getContractEventsChunked(this.publicClient, {
@@ -162,6 +164,9 @@ export class PerantoClient {
       abi: didRegistryAbi,
       eventName: "DIDAttributeChanged",
       args: { identity },
+      // ~30d @ 6s/block — short windows make older linktr33 services “vanish”
+      lookback: 500_000n,
+      chunkSize: 4_000n,
     });
     const now = Math.floor(Date.now() / 1000);
     // Latest write per attribute name wins
@@ -185,7 +190,15 @@ export class PerantoClient {
       const type = serviceTypeFromAttributeName(nameStr);
       const attrKey = serviceAttrKeyFromAttributeName(nameStr);
       const svc = decodeDidServiceValue(entry.value, type, did);
-      if (svc) out.push({ ...svc, attrKey });
+      if (svc) {
+        // Prefer JSON name; else use slot from attr key as display tag
+        const slot = serviceSlotFromAttributeName(nameStr);
+        out.push({
+          ...svc,
+          attrKey,
+          name: svc.name?.trim() || slot || undefined,
+        });
+      }
     }
     return out;
   }
@@ -220,16 +233,21 @@ export class PerantoClient {
     key?: string;
     serviceEndpoint: string | string[] | Record<string, unknown>;
     id?: string;
+    /** Display label on public page (defaults to key/slot). */
+    name?: string;
     validitySeconds?: bigint;
   }) {
     const did = formatDid(this.network, this.accountAddress!);
     const attrKey = opts.key?.trim()
       ? `${opts.type.trim()}.${opts.key.trim()}`
       : opts.type.trim();
+    const display =
+      opts.name?.trim() || opts.key?.trim() || undefined;
     const payload = encodeDidServiceValue({
       id: opts.id ?? `${did}#service-${attrKey}`,
       type: opts.type,
       serviceEndpoint: opts.serviceEndpoint,
+      name: display,
     });
     return this.setDidAttribute(
       serviceAttributeName(opts.type, opts.key),
@@ -668,6 +686,10 @@ export class PerantoClient {
 
   async tip(node: Address, to: Address, valueWei: bigint) {
     this.requireWallet();
+    const from = this.walletClient!.account!.address;
+    if (from.toLowerCase() === to.toLowerCase()) {
+      throw new Error("No puedes tiparte a ti mismo (Care/Love requieren otro peer)");
+    }
     const hash = await this.walletClient!.writeContract({
       address: node,
       abi: disCONodeAbi,
@@ -813,7 +835,7 @@ export class PerantoClient {
   }
 
   async scores(node: Address, account: Address) {
-    const [love, care, currentPeriod] = await Promise.all([
+    const [love, care, livelihood, currentPeriod] = await Promise.all([
       this.publicClient.readContract({
         address: node,
         abi: disCONodeAbi,
@@ -829,10 +851,56 @@ export class PerantoClient {
       this.publicClient.readContract({
         address: node,
         abi: disCONodeAbi,
+        functionName: "livelihoodPoints",
+        args: [account],
+      }),
+      this.publicClient.readContract({
+        address: node,
+        abi: disCONodeAbi,
         functionName: "currentPeriod",
       }),
     ]);
-    return { love, care, currentPeriod };
+    return { love, care, livelihood, currentPeriod };
+  }
+
+  /** Sum Love / Care / Livelihood across nodes where account is a member. */
+  async aggregateMemberScores(account: Address): Promise<{
+    love: bigint;
+    care: bigint;
+    livelihood: bigint;
+    nodes: Array<{
+      address: Address;
+      name: string;
+      love: bigint;
+      care: bigint;
+      livelihood: bigint;
+    }>;
+  }> {
+    const membership = await this.listMembershipNodes(account);
+    let love = 0n;
+    let care = 0n;
+    let livelihood = 0n;
+    const nodes: Array<{
+      address: Address;
+      name: string;
+      love: bigint;
+      care: bigint;
+      livelihood: bigint;
+    }> = [];
+    for (const n of membership) {
+      const s = await this.scores(n.address, account);
+      love += s.love;
+      care += s.care;
+      livelihood += s.livelihood;
+      nodes.push({
+        address: n.address,
+        name: n.name,
+        love: s.love,
+        care: s.care,
+        livelihood: s.livelihood,
+      });
+    }
+    return { love, care, livelihood, nodes };
   }
 
   async listNodes(): Promise<Address[]> {
@@ -876,6 +944,17 @@ export class PerantoClient {
         return { address, name, memberCount };
       })
     );
+  }
+
+  /** DisCO nodes where `account` is currently a member (for tips / Love). */
+  async listMembershipNodes(
+    account: Address
+  ): Promise<Array<{ address: Address; name: string; memberCount: bigint }>> {
+    const all = await this.listNodesWithMeta();
+    const flags = await Promise.all(
+      all.map((n) => this.isMember(n.address, account))
+    );
+    return all.filter((_, i) => flags[i]);
   }
 
   async getMembers(node: Address): Promise<Address[]> {

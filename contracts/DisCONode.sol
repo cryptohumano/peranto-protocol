@@ -134,9 +134,12 @@ contract DisCONode {
     }
 
     /// @notice Peer tip: full value to recipient; Care↑ sender, Love↑ recipient (+ period aggregates).
+    /// @dev Self-tips forbidden: would mint Care+Love with zero PAS transfer and inflate period weight / sustainBps.
+    ///      Tipping the node (`to == this`) remains allowed (Care↑ sender, period Love↑, PAS stays in treasury).
     function tip(address to) external payable whenActive {
         require(msg.value > 0, "DisCONode: zero tip");
         require(to != address(0), "DisCONode: zero to");
+        require(to != msg.sender, "DisCONode: self tip");
         require(isMember[to] || to == address(this), "DisCONode: to not member");
 
         uint256 pid = currentPeriod();

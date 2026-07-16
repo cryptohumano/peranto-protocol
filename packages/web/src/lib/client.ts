@@ -15,6 +15,11 @@ import {
   loadPaseoDeployment,
 } from "./deployment";
 import { loadSession, type SessionIdentity } from "./session";
+import {
+  forgetDidService,
+  mergeDidDocumentServices,
+  rememberDidService,
+} from "./did-service-cache";
 
 let cachedAddresses: ContractAddresses | null = null;
 
@@ -201,13 +206,57 @@ export async function portalSetDidService(
   type: string,
   serviceEndpoint: string,
   session?: SessionIdentity | null,
-  key?: string
+  key?: string,
+  name?: string
 ) {
-  if (writeMode(session) === "aura") {
-    return auraAction("did.setService", { type, serviceEndpoint, key });
+  const s = session ?? loadSession();
+  const attrKey = key?.trim() ? `${type.trim()}.${key.trim()}` : type.trim();
+  const display = name?.trim() || key?.trim() || undefined;
+  if (writeMode(s) === "aura") {
+    const res = await auraAction("did.setService", {
+      type,
+      serviceEndpoint,
+      key,
+      name: display,
+    });
+    try {
+      const addresses = await getAddresses();
+      if (s?.did) {
+        rememberDidService(addresses.DIDRegistry, s.did, {
+          id: `${s.did}#service-${attrKey}`,
+          type,
+          serviceEndpoint,
+          attrKey,
+          name: display,
+        });
+      }
+    } catch {
+      /* cache best-effort */
+    }
+    return res;
   }
-  const client = await getWriteClient(session);
-  return client.setDidService({ type, serviceEndpoint, key });
+  const client = await getWriteClient(s);
+  const out = await client.setDidService({
+    type,
+    serviceEndpoint,
+    key,
+    name: display,
+  });
+  try {
+    const addresses = await getAddresses();
+    if (s?.did) {
+      rememberDidService(addresses.DIDRegistry, s.did, {
+        id: `${s.did}#service-${attrKey}`,
+        type,
+        serviceEndpoint,
+        attrKey,
+        name: display,
+      });
+    }
+  } catch {
+    /* cache best-effort */
+  }
+  return out;
 }
 
 export async function portalClearDidService(
@@ -215,27 +264,54 @@ export async function portalClearDidService(
   session?: SessionIdentity | null,
   key?: string
 ) {
-  if (writeMode(session) === "aura") {
-    return auraAction("did.clearService", {
+  const s = session ?? loadSession();
+  const attrKey =
+    key !== undefined
+      ? `${typeOrAttrKey}.${key}`
+      : typeOrAttrKey.includes(".")
+        ? typeOrAttrKey
+        : typeOrAttrKey;
+  if (writeMode(s) === "aura") {
+    const res = await auraAction("did.clearService", {
       type: typeOrAttrKey,
       key,
       attrKey: key === undefined ? typeOrAttrKey : undefined,
     });
+    try {
+      const addresses = await getAddresses();
+      if (s?.did) forgetDidService(addresses.DIDRegistry, s.did, attrKey);
+    } catch {
+      /* ignore */
+    }
+    return res;
   }
-  const client = await getWriteClient(session);
+  const client = await getWriteClient(s);
+  let out;
   if (key !== undefined) {
-    return client.clearDidService(typeOrAttrKey, key);
+    out = await client.clearDidService(typeOrAttrKey, key);
+  } else if (typeOrAttrKey.includes(".")) {
+    out = await client.clearDidServiceByAttrKey(typeOrAttrKey);
+  } else {
+    out = await client.clearDidService(typeOrAttrKey);
   }
-  // Prefer attrKey path when no separate key (e.g. "LinkedDomains.github")
-  if (typeOrAttrKey.includes(".")) {
-    return client.clearDidServiceByAttrKey(typeOrAttrKey);
+  try {
+    const addresses = await getAddresses();
+    if (s?.did) forgetDidService(addresses.DIDRegistry, s.did, attrKey);
+  } catch {
+    /* ignore */
   }
-  return client.clearDidService(typeOrAttrKey);
+  return out;
 }
 
 export async function portalResolveDid(did: string) {
   const client = await getReadClient();
-  return client.resolveDid(did);
+  const doc = await client.resolveDid(did);
+  try {
+    const addresses = await getAddresses();
+    return mergeDidDocumentServices(addresses.DIDRegistry, doc);
+  } catch {
+    return doc;
+  }
 }
 
 export async function portalResolveName(label: string) {
@@ -391,6 +467,12 @@ export async function portalTip(
   const client = await getWriteClient(session);
   const { parseEther } = await import("viem");
   return client.tip(node, to, parseEther(valueEther));
+}
+
+/** Nodes where `account` is a member (for public tip / Love). */
+export async function portalListMembershipNodes(account: Address) {
+  const client = await getReadClient();
+  return client.listMembershipNodes(account);
 }
 
 export async function portalContribute(

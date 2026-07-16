@@ -10,14 +10,18 @@ async function main() {
   const network = await ethers.provider.getNetwork();
   const outFile = path.join(__dirname, "..", "deployments", `${network.chainId}.json`);
   const deployment = JSON.parse(fs.readFileSync(outFile, "utf8")) as {
-    contracts: { DisCOFactory: string; PerantoNode: string | null };
+    contracts: {
+      DisCOFactory: string;
+      PerantoNode: string | null;
+      EcosystemLabNode?: string | null;
+    };
   };
 
   const factory = await ethers.getContractAt(
     "DisCOFactory",
     deployment.contracts.DisCOFactory
   );
-  const name = process.env.NODE_NAME ?? "EcoLab";
+  const name = process.env.NODE_NAME ?? "EcosystemLab";
   const before = await factory.nodeCount();
   const tx = await factory.createNode(name);
   const receipt = await tx.wait();
@@ -50,7 +54,14 @@ async function main() {
   }
 
   console.log(`Created node ${name} → ${node}`);
-  deployment.contracts.PerantoNode = node;
+  if (name === "Peranto") {
+    deployment.contracts.PerantoNode = node;
+  } else {
+    deployment.contracts.EcosystemLabNode = node;
+    if (!deployment.contracts.PerantoNode) {
+      deployment.contracts.PerantoNode = node;
+    }
+  }
   fs.writeFileSync(outFile, JSON.stringify(deployment, null, 2));
   console.log(`Updated ${outFile}`);
 

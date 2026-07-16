@@ -188,7 +188,7 @@ async function main() {
       testType: arg("--type", argv) || "pH",
       result: arg("--result", argv) || "7.2",
       unit: arg("--unit", argv) || "pH",
-      labName: arg("--lab", argv) || "EcoLab Demo",
+      labName: arg("--lab", argv) || "EcosystemLab Demo",
       testedAt: new Date().toISOString(),
     });
     const dir = path.resolve(process.cwd(), ".peranto");

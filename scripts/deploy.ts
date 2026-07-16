@@ -14,6 +14,8 @@ async function main() {
   const periodBlocks = BigInt(process.env.PERIOD_BLOCKS ?? "432000");
   const reserveFloor = BigInt(process.env.RESERVE_FLOOR ?? "0");
   const createPerantoNode = (process.env.CREATE_PERANTO_NODE ?? "true") !== "false";
+  const createEcosystemLab =
+    (process.env.CREATE_ECOSYSTEM_LAB ?? "true") !== "false";
 
   console.log(`Deployer: ${deployer.address}`);
   console.log(`Chain ID: ${network.chainId}`);
@@ -43,19 +45,21 @@ async function main() {
   await (await protocolTreasury.setFactory(await factory.getAddress())).wait();
 
   let perantoNode: string | undefined;
-  if (createPerantoNode) {
+  let ecosystemLabNode: string | undefined;
+
+  async function createNamedNode(name: string): Promise<string | undefined> {
     const [deployerSigner] = await ethers.getSigners();
     const before = await factory.nodeCount();
-    const tx = await factory.createNode("Peranto", overrides);
+    const tx = await factory.createNode(name, overrides);
     const receipt = await tx.wait();
-    perantoNode = (await factory.nodeByCreator(deployerSigner!.address)) as string;
-    if (!perantoNode || perantoNode === ethers.ZeroAddress) {
+    let node = (await factory.nodeByCreator(deployerSigner!.address)) as string;
+    if (!node || node === ethers.ZeroAddress) {
       const after = await factory.nodeCount();
       if (after > before) {
-        perantoNode = (await factory.allNodes(after - 1n)) as string;
+        node = (await factory.allNodes(after - 1n)) as string;
       }
     }
-    if (!perantoNode || perantoNode === ethers.ZeroAddress) {
+    if (!node || node === ethers.ZeroAddress) {
       const created = receipt!.logs
         .map((log) => {
           try {
@@ -65,14 +69,21 @@ async function main() {
           }
         })
         .find((parsed) => parsed?.name === "NodeCreated");
-      perantoNode = created?.args?.node as string | undefined;
+      node = created?.args?.node as string;
     }
-    if (!perantoNode || perantoNode === ethers.ZeroAddress) {
-      console.warn("WARN: Peranto node create tx mined but address not resolved");
-      perantoNode = undefined;
-    } else {
-      console.log(`Peranto node → ${perantoNode}`);
+    if (!node || node === ethers.ZeroAddress) {
+      console.warn(`WARN: ${name} node create tx mined but address not resolved`);
+      return undefined;
     }
+    console.log(`${name} node → ${node}`);
+    return node;
+  }
+
+  if (createPerantoNode) {
+    perantoNode = await createNamedNode("Peranto");
+  }
+  if (createEcosystemLab) {
+    ecosystemLabNode = await createNamedNode("EcosystemLab");
   }
 
   const DID = await ethers.getContractFactory("DIDRegistry");
@@ -201,6 +212,7 @@ async function main() {
       ProtocolTreasury: treasuryAddr,
       DisCOFactory: await factory.getAddress(),
       PerantoNode: perantoNode ?? null,
+      EcosystemLabNode: ecosystemLabNode ?? null,
       DIDRegistry: await did.getAddress(),
       SchemaRegistry: await schema.getAddress(),
       AttesterRegistry: await attester.getAddress(),

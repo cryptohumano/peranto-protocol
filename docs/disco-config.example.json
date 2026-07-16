@@ -1,7 +1,7 @@
 {
   "$schema": "https://peranto.app/schemas/DiscoConfig/v1.json",
   "version": 1,
-  "name": "EcoLab Demo",
+  "name": "EcosystemLab Demo",
   "network": "paseo",
   "nodeAddress": null,
   "memberSchema": "peranto:Member:v1",

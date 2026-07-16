@@ -15,7 +15,7 @@ describe("DisCO economy", function () {
     const factory = await Factory.deploy(await treasury.getAddress(), gov.address, PERIOD, 0n);
     await treasury.connect(gov).setFactory(await factory.getAddress());
 
-    await factory.connect(alice).createNode("EcoLab");
+    await factory.connect(alice).createNode("EcosystemLab");
     await factory.connect(bob).createNode("Traductores");
 
     const nodeA = await ethers.getContractAt(
@@ -98,14 +98,13 @@ describe("DisCO economy", function () {
   });
 
   it("harvests with higher sustainBps when isolated and distributes hybrid", async function () {
-    const { alice, bob, nodeA, nodeB, treasury, PERIOD } = await deployStack();
+    const { alice, bob, carol, nodeA, nodeB, treasury, PERIOD } = await deployStack();
 
     await nodeA.connect(alice).contribute({ value: ethers.parseEther("100") });
     await nodeB.connect(bob).contribute({ value: ethers.parseEther("100") });
 
-    // Node A: tip creates love+care → more integrated; also federation
-    await nodeA.connect(alice).tip(alice.address, { value: ethers.parseEther("0.01") });
-    // tip to self not allowed unless member - alice is member, tip to alice works (love to alice)
+    // Node A: peer tip creates love+care → more integrated; also federation
+    await nodeA.connect(alice).tip(carol.address, { value: ethers.parseEther("0.01") });
     await nodeA.connect(alice).addFederationLink(await nodeB.getAddress());
 
     // Node B: only contribute, no love tips and no links → isolated → 5%
@@ -136,13 +135,20 @@ describe("DisCO economy", function () {
     const { alice, bob, nodeA, nodeB, treasury, PERIOD } = await deployStack();
     await nodeA.connect(alice).contribute({ value: ethers.parseEther("5") });
     await nodeB.connect(bob).contribute({ value: ethers.parseEther("5") });
-    await nodeA.connect(alice).tip(alice.address, { value: 1 });
+    await nodeA.connect(alice).tip(await nodeA.getAddress(), { value: 1 });
     await mine(Number(PERIOD) + 1);
     const p = await nodeA.createdPeriod();
     await nodeA.harvest(p);
     await nodeB.harvest(p);
     await treasury.distribute(p);
     await expect(treasury.distribute(p)).to.be.revertedWith("ProtocolTreasury: done");
+  });
+
+  it("rejects self tip", async function () {
+    const { alice, nodeA } = await deployStack();
+    await expect(
+      nodeA.connect(alice).tip(alice.address, { value: 1 })
+    ).to.be.revertedWith("DisCONode: self tip");
   });
 
   it("dissolve empties members, pays residual, unregisters node", async function () {
@@ -165,7 +171,7 @@ describe("DisCO economy", function () {
     expect(after + gas - before).to.equal(seed);
 
     await expect(
-      nodeA.connect(alice).tip(alice.address, { value: 1 })
+      nodeA.connect(alice).tip(carol.address, { value: 1 })
     ).to.be.revertedWith("DisCONode: dissolved");
   });
 });

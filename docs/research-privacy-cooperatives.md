@@ -62,9 +62,9 @@ Esto es **privacidad de contenido**, no de metadatos de participación. En coope
 
 ## 7. Caso de uso explotable con VC (recomendado)
 
-**EcoLab cooperativa + membresía + resultados de eco-testing**
+**EcosystemLab cooperativa + membresía + resultados de eco-testing**
 
-1. Usuario descubre el nodo **EcoLab**, pide unirse (gobernanza / attester).
+1. Usuario descubre el nodo **EcosystemLab**, pide unirse (gobernanza / attester).
 2. Attester emite VC **`Member`** (identity cooperativa) y ancla hash.
 3. Lab/attester emite VC **`EcoTestResult`** por muestra (livelihood / evidencia portable).
 4. Holder presenta Member o EcoTest a terceros (otra DisCO, municipio, ficha de proyecto) sin reenviar bases de datos centralizadas.

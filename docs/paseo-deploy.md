@@ -59,8 +59,9 @@ En el eth-rpc de Hub TestNet este mensaje suele aparecer cuando:
 
 1. Fund a secp256k1 account with PAS (official Paseo faucets).
 2. Copy `.env.example` → `.env` and set `PRIVATE_KEY`.
-3. Optionally set `MIN_STAKE`, `ANCHOR_FEE`, `NAME_FEE`, `PERIOD_BLOCKS`, `RESERVE_FLOOR`, `CREATE_PERANTO_NODE`.
+3. Optionally set `MIN_STAKE`, `ANCHOR_FEE`, `NAME_FEE`, `PERIOD_BLOCKS`, `RESERVE_FLOOR`, `CREATE_PERANTO_NODE`, `CREATE_ECOSYSTEM_LAB`.
    Fees go to `ProtocolTreasury` (deployed by the script). Legacy `TREASURY` EOA override is no longer used.
+   By default deploy creates two DisCO nodes: **Peranto** (protocol peer) and **EcosystemLab** (demo lab).
 4. Run (incluye sync web + tip para Aura):
 
 ```bash

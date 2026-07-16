@@ -31,6 +31,7 @@ const block = `export const DEFAULT_PASEO_ADDRESSES: ContractAddresses = {
   ProtocolTreasury: "${c.ProtocolTreasury}",
   DisCOFactory: "${c.DisCOFactory}",
   PerantoNode: ${c.PerantoNode ? `"${c.PerantoNode}"` : "null"},
+  EcosystemLabNode: ${c.EcosystemLabNode ? `"${c.EcosystemLabNode}"` : "null"},
   DIDRegistry: "${c.DIDRegistry}",
   SchemaRegistry: "${c.SchemaRegistry}",
   AttesterRegistry: "${c.AttesterRegistry}",

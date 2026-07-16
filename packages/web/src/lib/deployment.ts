@@ -28,6 +28,7 @@ export function deploymentToAddresses(d: DeploymentJson): ContractAddresses {
     ProtocolTreasury: c.ProtocolTreasury,
     DisCOFactory: c.DisCOFactory,
     PerantoNode: c.PerantoNode ?? null,
+    EcosystemLabNode: c.EcosystemLabNode ?? null,
   };
 }
 

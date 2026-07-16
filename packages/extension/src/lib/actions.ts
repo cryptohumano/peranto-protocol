@@ -233,14 +233,16 @@ export async function runAction(
         throw new Error("type y serviceEndpoint requeridos");
       }
       const key = payload.key ? String(payload.key) : undefined;
+      const name = payload.name ? String(payload.name) : undefined;
       const client = await buildClient(true);
       const tx = await client.setDidService({
         type,
         key,
+        name,
         serviceEndpoint: serviceEndpoint as string,
         id: payload.id ? String(payload.id) : undefined,
       });
-      return jsonSafe({ tx, type, key });
+      return jsonSafe({ tx, type, key, name });
     }
 
     case "did.clearService": {
@@ -315,7 +317,7 @@ export async function runAction(
         testType: String(payload.testType ?? "pH"),
         result: String(payload.result ?? "7.2"),
         unit: String(payload.unit ?? "pH"),
-        labName: String(payload.labName ?? "EcoLab"),
+        labName: String(payload.labName ?? "EcosystemLab"),
         testedAt: String(payload.testedAt ?? new Date().toISOString()),
       });
       const cred: StoredCredential = {

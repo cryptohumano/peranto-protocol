@@ -95,6 +95,8 @@ export type DidService = {
    * (e.g. `LinkedDomains` or `LinkedDomains.github`).
    */
   attrKey?: string;
+  /** Optional display label (linktr33 tag). */
+  name?: string;
 };
 
 export type DidDocument = {
@@ -174,8 +176,15 @@ export function encodeDidServiceValue(service: {
   id?: string;
   type: string;
   serviceEndpoint: string | string[] | Record<string, unknown>;
+  name?: string;
 }): Hex {
-  return bytesToHex(stringToBytes(JSON.stringify(service)));
+  const body: Record<string, unknown> = {
+    id: service.id,
+    type: service.type,
+    serviceEndpoint: service.serviceEndpoint,
+  };
+  if (service.name?.trim()) body.name = service.name.trim().slice(0, 48);
+  return bytesToHex(stringToBytes(JSON.stringify(body)));
 }
 
 export function decodeDidServiceValue(
@@ -186,12 +195,18 @@ export function decodeDidServiceValue(
   if (!value || value === "0x") return null;
   try {
     const text = hexToString(value);
-    const parsed = JSON.parse(text) as Partial<DidService>;
+    const parsed = JSON.parse(text) as Partial<DidService> & {
+      name?: string;
+    };
     if (!parsed.serviceEndpoint) return null;
     return {
       id: parsed.id ?? `${did}#service-${fallbackType}`,
       type: parsed.type ?? fallbackType,
       serviceEndpoint: parsed.serviceEndpoint,
+      name:
+        typeof parsed.name === "string" && parsed.name.trim()
+          ? parsed.name.trim().slice(0, 48)
+          : undefined,
     };
   } catch {
     // Plain UTF-8 endpoint string

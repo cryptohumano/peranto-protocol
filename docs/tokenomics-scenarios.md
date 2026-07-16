@@ -84,7 +84,7 @@ Ejemplo nodo A: Care=40, Love=40, Anchors=10 → \(w = 200+120+10 = 330\).
 Nodo B: Care=10, Love=5, Anchors=2 → \(w = 50+15+2 = 67\).  
 Si el commons a repartir es 100 PAS y 50% weighted: A recibe ~\(50 \times 330/397 ≈ 41.6\) PAS del tramo weighted (+ parte equal).
 
-**Escenario demo:** Carol tipa a Alice (Carol Care+1, Alice Love+1); Bob tipa a Alice; Carol tipa al nodo MST/EcoLab.
+**Escenario demo:** Carol tipa a Alice (Carol Care+1, Alice Love+1); Bob tipa a Alice; Carol tipa al nodo MST/EcosystemLab.
 
 ---
 

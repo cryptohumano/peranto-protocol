@@ -8,6 +8,8 @@ import { ActivityPage } from "./pages/Activity";
 import { CredentialsPage } from "./pages/Credentials";
 import { GuidePage } from "./pages/Guide";
 import { EconomyPage } from "./pages/Economy";
+import { MyPagePage } from "./pages/MyPage";
+import { PublicProfilePage } from "./pages/PublicProfile";
 import { AppShell } from "./components/AppShell";
 import { loadSession } from "./lib/session";
 
@@ -26,6 +28,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Navigate to="/login" replace />} />
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/u/:ref" element={<PublicProfilePage />} />
         <Route
           element={
             <RequireSession>
@@ -34,6 +37,7 @@ export default function App() {
           }
         >
           <Route path="/id" element={<IdentityPage />} />
+          <Route path="/page" element={<MyPagePage />} />
           <Route path="/coop" element={<CoopPage />} />
           <Route path="/economia" element={<EconomyPage />} />
           <Route path="/credentials" element={<CredentialsPage />} />

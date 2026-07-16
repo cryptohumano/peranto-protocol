@@ -40,7 +40,7 @@ npm run cli -- vc verify .peranto/vc-xxxx.jwt
 ### CLI demo — DisCO
 
 ```bash
-npm run cli -- disco create EcoLab -k $PERANTO_KEY
+npm run cli -- disco create EcosystemLab -k $PERANTO_KEY
 npm run cli -- disco tip 0xNode... 0xMember... --value 0.1 -k $PERANTO_KEY
 npm run cli -- disco contribute 0xNode... --value 1 -k $PERANTO_KEY
 npm run cli -- disco harvest 0xNode... 0 -k $PERANTO_KEY
@@ -73,12 +73,13 @@ npm run cli -- disco scores 0xNode... 0xAccount...
 ```bash
 npm run web:dev          # http://localhost:5173 — /login /id /coop /economia
 npm run schemas:register -- --network paseo   # schemas nuevos sin redeploy
-npm run seed:node -- --network paseo          # createNode EcoLab
+npm run seed:node -- --network paseo          # createNode EcosystemLab
 npm run smoke:paseo      # name + Member VC + tip/scores (PRIVATE_KEY + deployments/420420417.json)
 npm run smoke:disco      # Love/Care/Livelihood multi-cuenta + proyección epoch
 ```
 
-Rutas: Identidad, Cooperativa, **Economía** (DisCOs + schemas + Love/Care), Credenciales, Guía, Transacciones, Tesoros.
+Rutas: Identidad, **linktr33** (página pública DID), Cooperativa, Economía, Credenciales, Guía, Transacciones, Tesoros.  
+Página pública (sin login): `/#/u/@nombre` o `/#/u/<did>`.
 
 **GitHub Pages:** [https://cryptohumano.github.io/peranto-protocol/#/login](https://cryptohumano.github.io/peranto-protocol/#/login)  
 Portal estático (sin backend). Lecturas DID/nombre/economía → RPC público de Paseo.  
