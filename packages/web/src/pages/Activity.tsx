@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Navigate } from "react-router-dom";
 import type { ActivityTx } from "@peranto/sdk";
 import { isAddress, type Address } from "viem";
-import { BookUser, Send, List } from "lucide-react";
+import { BookUser, MessageCircle, Send, List } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardDesc, CardTitle } from "@/components/ui/card";
@@ -18,6 +18,7 @@ import {
 } from "@/lib/activity-sync";
 import { activityColumns } from "@/components/transactions/columns";
 import { ActivityDataTable } from "@/components/transactions/data-table";
+import { ContactLinksSheet } from "@/components/ContactLinksSheet";
 import {
   loadAddressBook,
   removeAddressBookEntry,
@@ -54,6 +55,10 @@ export function ActivityPage() {
   const [abLabel, setAbLabel] = useState("");
   const [abAddress, setAbAddress] = useState("");
   const [abNote, setAbNote] = useState("");
+
+  const [contactSheet, setContactSheet] = useState<AddressBookEntry | null>(
+    null
+  );
 
   const refreshBook = useCallback(() => {
     setBook(loadAddressBook());
@@ -393,7 +398,17 @@ export function ActivityPage() {
                         </p>
                       )}
                     </div>
-                    <div className="flex gap-1">
+                    <div className="flex flex-wrap gap-1">
+                      {(e.links?.length ?? 0) > 0 && (
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => setContactSheet(e)}
+                        >
+                          <MessageCircle className="size-3.5" />
+                          Contactar
+                        </Button>
+                      )}
                       <Button
                         size="sm"
                         variant="secondary"
@@ -403,6 +418,7 @@ export function ActivityPage() {
                           setTab("send");
                         }}
                       >
+                        <Send className="size-3.5" />
                         Enviar
                       </Button>
                       <Button
@@ -431,6 +447,16 @@ export function ActivityPage() {
               </ul>
             )}
           </Card>
+
+          <ContactLinksSheet
+            open={contactSheet !== null}
+            onOpenChange={(open) => {
+              if (!open) setContactSheet(null);
+            }}
+            label={contactSheet?.label ?? ""}
+            shareUrl={contactSheet?.shareUrl}
+            links={contactSheet?.links ?? []}
+          />
         </TabsContent>
       </Tabs>
     </div>

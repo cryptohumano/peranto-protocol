@@ -303,9 +303,16 @@ export async function portalClearDidService(
   return out;
 }
 
-export async function portalResolveDid(did: string) {
+export async function portalResolveDid(
+  did: string,
+  opts?: { useCache?: boolean }
+) {
   const client = await getReadClient();
   const doc = await client.resolveDid(did);
+  // Public pages: chain-only — local cache is for the editor (RPC lookback gaps).
+  if (opts?.useCache === false) {
+    return doc;
+  }
   try {
     const addresses = await getAddresses();
     return mergeDidDocumentServices(addresses.DIDRegistry, doc);

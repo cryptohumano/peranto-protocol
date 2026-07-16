@@ -7,6 +7,7 @@ import {
   resolvePageThemeId,
   themeTokens,
 } from "@/lib/page-themes";
+import { iconForPublicLink } from "@/lib/link-icons";
 import { cn } from "@/lib/utils";
 
 type PreviewBadge = {
@@ -24,6 +25,8 @@ type Props = {
   className?: string;
   /** Compact phone-frame style */
   framed?: boolean;
+  /** When true, caption says draft has unpublished changes */
+  dirty?: boolean;
 };
 
 /** Local preview of the public linktr33 (no chain reads). */
@@ -35,6 +38,7 @@ export function Linktr33Preview({
   titleFallback,
   className,
   framed = true,
+  dirty = false,
 }: Props) {
   const theme = themeTokens(resolvePageThemeId(profile.theme));
   const layout = resolvePageLayoutId(profile.layout);
@@ -42,13 +46,6 @@ export function Linktr33Preview({
   const title = profile.title?.trim() || titleFallback;
   const align =
     layout === "rail" ? "text-left items-start" : "text-center items-center";
-
-  const linkClass = cn(
-    "group flex w-full items-center justify-between gap-3 px-3 py-2.5 text-sm font-semibold transition",
-    layout === "classic" && "rounded-xl border shadow-md shadow-black/10",
-    layout === "rail" && "rounded-none border-b bg-transparent px-0 shadow-none",
-    layout === "blocks" && "rounded-sm border-0 shadow-none"
-  );
 
   const inner = (
     <div
@@ -138,28 +135,42 @@ export function Linktr33Preview({
             layout === "blocks" && "gap-1.5"
           )}
         >
-          {links.map((l) => (
-            <li key={l.attrKey}>
-              <div
-                className={linkClass}
-                style={
-                  layout === "rail"
-                    ? {
-                        color: theme.ink,
-                        borderColor: "rgba(255,255,255,0.12)",
-                      }
-                    : {
-                        background: theme.linkBg,
-                        color: theme.linkInk,
-                        borderColor: theme.linkBorder,
-                      }
-                }
-              >
-                <span className="min-w-0 truncate capitalize">{l.label}</span>
-                <ExternalLink className="size-3.5 shrink-0 opacity-40" />
-              </div>
-            </li>
-          ))}
+          {links.map((l) => {
+            const Icon = iconForPublicLink(l);
+            return (
+              <li key={l.attrKey}>
+                <div
+                  className={cn(
+                    "group flex w-full items-center gap-2.5 px-3 py-2.5 text-sm font-semibold",
+                    layout === "classic" && "rounded-xl border shadow-md shadow-black/10",
+                    layout === "rail" &&
+                      "rounded-none border-b bg-transparent px-0 shadow-none",
+                    layout === "blocks" && "rounded-sm border-0 shadow-none"
+                  )}
+                  style={
+                    layout === "rail"
+                      ? {
+                          color: theme.ink,
+                          borderColor: "rgba(255,255,255,0.12)",
+                        }
+                      : {
+                          background: theme.linkBg,
+                          color: theme.linkInk,
+                          borderColor: theme.linkBorder,
+                        }
+                  }
+                >
+                  <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-black/[0.06]">
+                    <Icon className="size-3.5 opacity-80" />
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-left">
+                    {l.label}
+                  </span>
+                  <ExternalLink className="size-3 shrink-0 opacity-35" />
+                </div>
+              </li>
+            );
+          })}
           {links.length === 0 && (
             <li
               className="rounded-xl border border-dashed px-3 py-6 text-center text-[11px]"
@@ -212,7 +223,9 @@ export function Linktr33Preview({
         <div className="overflow-hidden rounded-[1.35rem]">{inner}</div>
       </div>
       <p className="mt-2 text-center text-[10px] text-muted-foreground">
-        Vista previa · no publicada aún
+        {dirty
+          ? "Vista previa · hay cambios sin publicar"
+          : "Vista previa · al día con lo publicado"}
       </p>
     </div>
   );

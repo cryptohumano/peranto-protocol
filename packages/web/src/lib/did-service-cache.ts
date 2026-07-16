@@ -5,10 +5,12 @@ type CachedSvc = {
   type: string;
   serviceEndpoint: DidService["serviceEndpoint"];
   id?: string;
+  name?: string;
 };
 
 function cacheKey(registry: string, did: string): string {
-  return `peranto:did-svc-v1:${registry.toLowerCase()}:${did.toLowerCase()}`;
+  // v2: stores display name; old v1 keys ignored (drops zombie bare attrs)
+  return `peranto:did-svc-v2:${registry.toLowerCase()}:${did.toLowerCase()}`;
 }
 
 function readCache(registry: string, did: string): CachedSvc[] {
@@ -34,6 +36,7 @@ function writeCache(registry: string, did: string, services: DidService[]) {
       type: s.type,
       serviceEndpoint: s.serviceEndpoint,
       id: s.id,
+      name: typeof s.name === "string" ? s.name : undefined,
     });
   }
   try {
@@ -43,7 +46,36 @@ function writeCache(registry: string, did: string, services: DidService[]) {
   }
 }
 
-/** Merge chain-resolved services with local cache so RPC lookback gaps don’t drop links. */
+function hrefKey(endpoint: DidService["serviceEndpoint"]): string | null {
+  if (typeof endpoint === "string") {
+    return endpoint.trim().toLowerCase().replace(/\/$/, "");
+  }
+  if (Array.isArray(endpoint) && typeof endpoint[0] === "string") {
+    return endpoint[0].trim().toLowerCase().replace(/\/$/, "");
+  }
+  if (endpoint && typeof endpoint === "object") {
+    const o = endpoint as Record<string, unknown>;
+    for (const k of ["uri", "url", "href", "id", "email"]) {
+      if (typeof o[k] === "string") {
+        return (o[k] as string).trim().toLowerCase().replace(/\/$/, "");
+      }
+    }
+  }
+  return null;
+}
+
+function isSlotted(attrKey: string): boolean {
+  return attrKey.includes(".");
+}
+
+/**
+ * Merge chain-resolved services with local cache so RPC lookback gaps don’t drop links.
+ *
+ * Rules (v2):
+ * - Chain wins for the same attrKey
+ * - Cache may only restore *slotted* keys missing from chain (never bare `Website` / `LinkedDomains`)
+ * - Don’t restore a cached endpoint if chain already has that URL under any key
+ */
 export function mergeDidDocumentServices(
   registry: string,
   doc: DidDocument
@@ -51,19 +83,30 @@ export function mergeDidDocumentServices(
   const fromChain = doc.service ?? [];
   const cached = readCache(registry, doc.id);
   const byKey = new Map<string, DidService>();
+  const hrefs = new Set<string>();
+
+  for (const s of fromChain) {
+    if (s.attrKey) byKey.set(s.attrKey, s);
+    else byKey.set(`${s.type}:${JSON.stringify(s.serviceEndpoint)}`, s);
+    const h = hrefKey(s.serviceEndpoint);
+    if (h) hrefs.add(h);
+  }
 
   for (const c of cached) {
+    if (!c.attrKey || byKey.has(c.attrKey)) continue;
+    // Never resurrect legacy bare attrs — they overwrite each other on-chain
+    // and linger in cache after clear/migrate to Type.slot
+    if (!isSlotted(c.attrKey)) continue;
+    const h = hrefKey(c.serviceEndpoint);
+    if (h && hrefs.has(h)) continue;
     byKey.set(c.attrKey, {
       id: c.id ?? `${doc.id}#service-${c.attrKey}`,
       type: c.type,
       serviceEndpoint: c.serviceEndpoint,
       attrKey: c.attrKey,
+      name: c.name,
     });
-  }
-  // Chain wins on conflict
-  for (const s of fromChain) {
-    if (s.attrKey) byKey.set(s.attrKey, s);
-    else byKey.set(`${s.type}:${JSON.stringify(s.serviceEndpoint)}`, s);
+    if (h) hrefs.add(h);
   }
 
   const merged = [...byKey.values()];
@@ -84,6 +127,7 @@ export function rememberDidService(
       type: c.type,
       serviceEndpoint: c.serviceEndpoint,
       attrKey: c.attrKey,
+      name: c.name,
     });
   }
   byKey.set(svc.attrKey, svc);

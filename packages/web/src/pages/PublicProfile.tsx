@@ -20,12 +20,14 @@ import {
   resolvePageThemeId,
   themeTokens,
 } from "@/lib/page-themes";
+import { iconForPublicLink } from "@/lib/link-icons";
 import { shortAddr, cn } from "@/lib/utils";
 import { buttonVariants } from "@/components/ui/button";
 import {
   PublicLoveInvite,
   PublicVertexStats,
 } from "@/components/PublicTipPanel";
+import { PublicPresentationCard } from "@/components/PublicPresentationCard";
 
 export function PublicProfilePage() {
   const { ref: refParam } = useParams<{ ref: string }>();
@@ -52,7 +54,7 @@ export function PublicProfilePage() {
       setErr("");
       try {
         const resolved = await portalResolveIdentityRef(ref);
-        const doc = await portalResolveDid(resolved.did);
+        const doc = await portalResolveDid(resolved.did, { useCache: false });
         if (cancelled) return;
         const { profile: p, links: L } = profileFromDocument(doc);
         setDid(resolved.did);
@@ -125,13 +127,13 @@ export function PublicProfilePage() {
 
   const align = layout === "rail" ? "text-left items-start" : "text-center items-center";
   const linkClass = cn(
-    "group flex w-full items-center justify-between gap-3 px-4 py-3.5 font-semibold transition",
+    "group flex w-full items-center gap-3 px-4 py-3.5 font-semibold transition",
     layout === "classic" &&
-      "rounded-2xl border shadow-lg shadow-black/15 hover:-translate-y-0.5",
+      "rounded-2xl border shadow-lg shadow-black/15 hover:-translate-y-0.5 hover:shadow-xl",
     layout === "rail" &&
       "rounded-none border-b bg-transparent px-0 shadow-none hover:opacity-80",
     layout === "blocks" &&
-      "rounded-sm border-0 shadow-none hover:brightness-95"
+      "rounded-md border-0 shadow-none hover:brightness-95"
   );
 
   return (
@@ -289,42 +291,61 @@ export function PublicProfilePage() {
                 layout === "blocks" && "mt-6 gap-2"
               )}
             >
-              {links.map((l, i) => (
-                <li
-                  key={l.attrKey}
-                  className="animate-[slideUp_0.5s_ease-out_both]"
-                  style={{ animationDelay: `${80 + i * 60}ms` }}
-                >
-                  <a
-                    href={l.href}
-                    target="_blank"
-                    rel="noreferrer"
-                    className={linkClass}
-                    style={
-                      layout === "rail"
-                        ? {
-                            color: theme.ink,
-                            borderColor: "rgba(255,255,255,0.12)",
-                          }
-                        : {
-                            background: theme.linkBg,
-                            color: theme.linkInk,
-                            borderColor: theme.linkBorder,
-                          }
-                    }
+              {links.map((l, i) => {
+                const Icon = iconForPublicLink(l);
+                return (
+                  <li
+                    key={l.attrKey}
+                    className="animate-[slideUp_0.5s_ease-out_both]"
+                    style={{ animationDelay: `${80 + i * 60}ms` }}
                   >
-                    <span
-                      className={cn(
-                        "min-w-0 truncate",
-                        layout === "blocks" && "text-lg tracking-tight"
-                      )}
+                    <a
+                      href={l.href}
+                      target="_blank"
+                      rel="noreferrer"
+                      className={linkClass}
+                      style={
+                        layout === "rail"
+                          ? {
+                              color: theme.ink,
+                              borderColor: "rgba(255,255,255,0.12)",
+                            }
+                          : {
+                              background: theme.linkBg,
+                              color: theme.linkInk,
+                              borderColor: theme.linkBorder,
+                            }
+                      }
                     >
-                      {l.label}
-                    </span>
-                    <ExternalLink className="size-4 shrink-0 opacity-40 transition group-hover:opacity-80" />
-                  </a>
-                </li>
-              ))}
+                      <span
+                        className={cn(
+                          "flex size-9 shrink-0 items-center justify-center",
+                          layout === "classic" &&
+                            "rounded-xl bg-black/[0.06]",
+                          layout === "blocks" && "rounded-md bg-black/[0.08]",
+                          layout === "rail" && "rounded-lg bg-white/10"
+                        )}
+                        style={
+                          layout === "rail"
+                            ? { background: "rgba(255,255,255,0.08)" }
+                            : undefined
+                        }
+                      >
+                        <Icon className="size-4 opacity-80" />
+                      </span>
+                      <span
+                        className={cn(
+                          "min-w-0 flex-1 truncate text-left",
+                          layout === "blocks" && "text-lg tracking-tight"
+                        )}
+                      >
+                        {l.label}
+                      </span>
+                      <ExternalLink className="size-3.5 shrink-0 opacity-35 transition group-hover:opacity-70" />
+                    </a>
+                  </li>
+                );
+              })}
               {links.length === 0 && (
                 <li
                   className="rounded-2xl border border-dashed px-4 py-8 text-sm"
@@ -339,6 +360,22 @@ export function PublicProfilePage() {
                 </li>
               )}
             </ul>
+
+            {shareHint && (
+              <PublicPresentationCard
+                shareUrl={shareHint}
+                title={title}
+                handle={handle}
+                did={did || undefined}
+                address={address}
+                links={links}
+                bio={profile.bio}
+                ink={theme.ink}
+                muted={theme.muted}
+                brand={theme.brand}
+                surface={theme.linkBg}
+              />
+            )}
 
             {address && profile.showLoveInvite !== false && (
               <PublicLoveInvite

@@ -19,6 +19,8 @@ const TYPE_TONE: Partial<Record<ActivityTxType, string>> = {
   "name.release": "bg-muted text-muted-foreground",
   "vc.anchor": "bg-[var(--color-clay)]/25 text-[var(--color-moss-deep)]",
   "vc.revoke": "bg-[var(--color-danger)]/10 text-[var(--color-danger)]",
+  "did.service": "bg-[var(--color-moss)]/10 text-[var(--color-moss-deep)]",
+  "did.service.clear": "bg-muted text-muted-foreground",
   "disco.create": "bg-[var(--color-moss)]/15 text-[var(--color-moss-deep)]",
   "disco.tip": "bg-[var(--color-mist)] text-[var(--color-moss-deep)]",
   "disco.contribute": "bg-[var(--color-mist)] text-[var(--color-moss-deep)]",

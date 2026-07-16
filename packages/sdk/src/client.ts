@@ -1134,6 +1134,32 @@ export class PerantoClient {
     tasks.push(
       (async () => {
         const logs = await getContractEventsChunked(this.publicClient, {
+          address: this.addresses.DIDRegistry,
+          abi: didRegistryAbi,
+          eventName: "DIDAttributeChanged",
+          args: { identity: account },
+          ...range,
+        });
+        for (const log of logs) {
+          const args = (log as {
+            args?: { name?: Hex; value?: Hex };
+          }).args;
+          if (!args?.name) continue;
+          const nameStr = attributeNameFromBytes32(args.name);
+          if (!isServiceAttributeName(nameStr)) continue;
+          const key = serviceAttrKeyFromAttributeName(nameStr);
+          const cleared = !args.value || args.value === "0x";
+          push(cleared ? "did.service.clear" : "did.service", log, {
+            detail: key,
+            role: "owner",
+          });
+        }
+      })()
+    );
+
+    tasks.push(
+      (async () => {
+        const logs = await getContractEventsChunked(this.publicClient, {
           address: this.addresses.CredentialStatusRegistry,
           abi: credentialStatusAbi,
           eventName: "CredentialAnchored",

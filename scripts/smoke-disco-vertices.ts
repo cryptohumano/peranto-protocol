@@ -100,6 +100,104 @@ async function tryStep(
   }
 }
 
+async function ensureMember(
+  steps: Array<Record<string, unknown>>,
+  gov: PerantoClient,
+  node: Address,
+  nodeLabel: string,
+  role: string,
+  addr: Address
+) {
+  const already = await gov.publicClient.readContract({
+    address: node,
+    abi: disCONodeAbi,
+    functionName: "isMember",
+    args: [addr],
+  });
+  if (already) {
+    steps.push({
+      step: `disco.addMember.${nodeLabel}.${role}`,
+      ok: true,
+      skipped: true,
+    });
+    return;
+  }
+  await tryStep(steps, `disco.addMember.${nodeLabel}.${role}`, async () => {
+    const tx = await gov.addMember(node, addr);
+    return { tx, account: addr, node };
+  });
+}
+
+async function publishLinktr33(
+  steps: Array<Record<string, unknown>>,
+  client: PerantoClient,
+  role: string,
+  loveNode: Address,
+  opts: {
+    title: string;
+    bio: string;
+    badges?: Array<{ credHash: Hex; schemaKey: string; label?: string }>;
+  }
+) {
+  const links = [
+    {
+      type: "Website",
+      key: "website",
+      url: "https://peranto.app",
+      name: "Website",
+    },
+    {
+      type: "LinkedDomains",
+      key: "github",
+      url: "https://github.com/peranto",
+      name: "GitHub",
+    },
+    {
+      type: "LinkedDomains",
+      key: "telegram",
+      url: "https://t.me/peranto",
+      name: "Telegram",
+    },
+    {
+      type: "CredentialInbox",
+      key: "mail",
+      url: "mailto:smoke@peranto.app",
+      name: "Mail",
+    },
+  ] as const;
+
+  await tryStep(steps, `linktr33.profile.${role}`, async () => {
+    const profile = {
+      title: opts.title,
+      bio: opts.bio,
+      theme: "moss",
+      layout: "classic",
+      showLoveInvite: true,
+      loveNode,
+      loveDefaultAmt: "0.01",
+      badges: opts.badges?.slice(0, 8),
+      linkOrder: links.map((l) => `${l.type}.${l.key}`),
+    };
+    const tx = await client.setDidService({
+      type: "PerantoPage",
+      serviceEndpoint: JSON.stringify(profile),
+    });
+    return { tx, loveNode };
+  });
+
+  for (const l of links) {
+    await tryStep(steps, `linktr33.link.${role}.${l.key}`, async () => {
+      const tx = await client.setDidService({
+        type: l.type,
+        key: l.key,
+        serviceEndpoint: l.url,
+        name: l.name,
+      });
+      return { tx, href: l.url };
+    });
+  }
+}
+
 async function main() {
   const network = (process.env.PERANTO_NETWORK ?? "paseo") as PerantoNetwork;
   const rpc =
@@ -125,7 +223,9 @@ async function main() {
   }
 
   const node = addresses.PerantoNode as Address | null;
+  const labNode = addresses.EcosystemLabNode as Address | null;
   if (!node) throw new Error("PerantoNode ausente en deployment");
+  if (!labNode) throw new Error("EcosystemLabNode ausente en deployment");
 
   const gov = clientFor(network, rpc, addresses, govPk);
   const lab = clientFor(network, rpc, addresses, smoke["attester-lab"].privateKey);
@@ -134,13 +234,16 @@ async function main() {
   const carol = clientFor(network, rpc, addresses, smoke["tipper-carol"].privateKey);
   const dave = clientFor(network, rpc, addresses, smoke["contributor-dave"].privateKey);
   const bobClient = clientFor(network, rpc, addresses, bob.privateKey);
+  const aliceClient = clientFor(network, rpc, addresses, alice.privateKey);
+  const erin = clientFor(network, rpc, addresses, smoke["governance-erin"].privateKey);
 
   const read = gov; // any client for reads
   const steps: Array<Record<string, unknown>> = [];
   const summary: Record<string, unknown> = {
     network,
     rpc,
-    node,
+    perantoNode: node,
+    ecosystemLabNode: labNode,
     roles: Object.fromEntries(
       need.map((r) => [r, smoke[r].address])
     ),
@@ -170,28 +273,21 @@ async function main() {
     ),
   });
 
-  // 1) Gobernanza: addMember Alice + Bob (tips requieren isMember)
-  for (const [role, addr] of [
+  // 1) Gobernanza: miembros en Peranto + EcosystemLab (tips requieren isMember)
+  const memberAddrs = [
     ["member-alice", alice.address],
     ["member-bob", bob.address],
-  ] as const) {
-    const already = await read.publicClient.readContract({
-      address: node,
-      abi: disCONodeAbi,
-      functionName: "isMember",
-      args: [addr],
-    });
-    if (already) {
-      steps.push({ step: `disco.addMember.${role}`, ok: true, skipped: true });
-      continue;
-    }
-    await tryStep(steps, `disco.addMember.${role}`, async () => {
-      const tx = await gov.addMember(node, addr);
-      return { tx, account: addr };
-    });
+    ["tipper-carol", smoke["tipper-carol"].address],
+    ["contributor-dave", smoke["contributor-dave"].address],
+    ["governance-erin", smoke["governance-erin"].address],
+    ["attester-lab", smoke["attester-lab"].address],
+  ] as const;
+  for (const [role, addr] of memberAddrs) {
+    await ensureMember(steps, gov, node, "peranto", role, addr);
+    await ensureMember(steps, gov, labNode, "ecosystemlab", role, addr);
   }
 
-  // 2) Attester + Member VC (Alice) + recordAnchor → periodo.anchors
+  // 2) Attester + Member VC (Alice) + recordAnchor en ambos nodos
   const schemaKey = "peranto:Member:v1";
   await tryStep(steps, "attester.stakeAndJoin", async () => {
     const authorized = await lab.isAuthorized(lab.accountAddress!, schemaKey);
@@ -204,22 +300,7 @@ async function main() {
     };
   });
 
-  // Lab must be member to recordAnchor — add if needed
-  {
-    const labAddr = lab.accountAddress!;
-    const already = await read.publicClient.readContract({
-      address: node,
-      abi: disCONodeAbi,
-      functionName: "isMember",
-      args: [labAddr],
-    });
-    if (!already) {
-      await tryStep(steps, "disco.addMember.attester-lab", async () => {
-        const tx = await gov.addMember(node, labAddr);
-        return { tx, account: labAddr };
-      });
-    }
-  }
+  // Lab ya es miembro (ensureMember arriba)
 
   let memberCredHash: Hex | null = null;
   await tryStep(steps, "vc.issueAndAnchor.alice", async () => {
@@ -243,33 +324,116 @@ async function main() {
   });
 
   if (memberCredHash) {
-    await tryStep(steps, "disco.recordAnchor", async () => {
+    await tryStep(steps, "disco.recordAnchor.peranto", async () => {
       const tx = await lab.recordNodeAnchor(node, memberCredHash!);
-      return { tx, credHash: memberCredHash };
+      return { tx, credHash: memberCredHash, node };
+    });
+    await tryStep(steps, "disco.recordAnchor.ecosystemlab", async () => {
+      const tx = await lab.recordNodeAnchor(labNode, memberCredHash!);
+      return { tx, credHash: memberCredHash, node: labNode };
     });
   }
 
-  // 3) Care / Love tips
-  // carol → alice (Care carol, Love alice, value to alice)
-  await tryStep(steps, "disco.tip.carol→alice", async () => {
-    const amount = parseEther("0.5");
-    const tx = await carol.tip(node, alice.address, amount);
-    return { tx, amount: pas(amount) };
+  // 2b) EcoTestResult + CareContribution (Alice)
+  await tryStep(steps, "vc.issueAndAnchor.alice.eco", async () => {
+    const issued = await lab.issueAndAnchorClaims(
+      alice.address,
+      {
+        sampleId: `smoke-${Date.now()}`,
+        testType: "integration",
+        result: "pass",
+        unit: "score",
+        labName: "EcosystemLab",
+        testedAt: new Date().toISOString(),
+      },
+      "peranto:EcoTestResult:v1",
+      "EcoTestResult"
+    );
+    return { credHash: issued.credHash, anchorTx: issued.anchorTx };
   });
 
-  // bob → alice
-  await tryStep(steps, "disco.tip.bob→alice", async () => {
-    const amount = parseEther("0.5");
-    const tx = await bobClient.tip(node, alice.address, amount);
-    return { tx, amount: pas(amount) };
+  await tryStep(steps, "vc.issueAndAnchor.alice.care", async () => {
+    const issued = await lab.issueAndAnchorClaims(
+      alice.address,
+      {
+        kind: "mentoring",
+        contributedAt: new Date().toISOString(),
+        hours: 2,
+        channel: "smoke-disco",
+      },
+      "peranto:CareContribution:v1",
+      "CareContribution"
+    );
+    return { credHash: issued.credHash, anchorTx: issued.anchorTx };
   });
 
-  // carol → node (Care carol, period Love, PAS queda en tesoro)
-  await tryStep(steps, "disco.tip.carol→node", async () => {
-    const amount = parseEther("0.5");
-    const tx = await carol.tip(node, node, amount);
-    return { tx, amount: pas(amount) };
+  // 2c) linktr33 smoke (Alice → EcosystemLab, Bob → Peranto)
+  await publishLinktr33(steps, aliceClient, "member-alice", labNode, {
+    title: "Alice Smoke",
+    bio: "Miembro demo · linktr33 smoke Paseo",
+    badges: memberCredHash
+      ? [
+          {
+            credHash: memberCredHash,
+            schemaKey: "peranto:Member:v1",
+            label: "Member",
+          },
+        ]
+      : undefined,
   });
+
+  await publishLinktr33(steps, bobClient, "member-bob", node, {
+    title: "Bob Smoke",
+    bio: "Cooperativa Peranto · pruebas Love/Care",
+  });
+
+  // 3) Care / Love tips — volumen alto para demo
+  const perantoTips: Array<{
+    step: string;
+    client: PerantoClient;
+    to: Address;
+    pas: string;
+  }> = [
+    { step: "disco.tip.carol→alice", client: carol, to: alice.address, pas: "1" },
+    { step: "disco.tip.bob→alice", client: bobClient, to: alice.address, pas: "1" },
+    { step: "disco.tip.erin→alice", client: erin, to: alice.address, pas: "0.5" },
+    { step: "disco.tip.carol→bob", client: carol, to: bob.address, pas: "0.5" },
+    { step: "disco.tip.dave→bob", client: dave, to: bob.address, pas: "0.5" },
+    { step: "disco.tip.carol→peranto", client: carol, to: node, pas: "1" },
+    { step: "disco.tip.bob→peranto", client: bobClient, to: node, pas: "0.5" },
+    { step: "disco.tip.erin→peranto", client: erin, to: node, pas: "0.5" },
+    { step: "disco.tip.carol→alice.2", client: carol, to: alice.address, pas: "0.25" },
+  ];
+
+  for (const t of perantoTips) {
+    await tryStep(steps, t.step, async () => {
+      const amount = parseEther(t.pas);
+      const tx = await t.client.tip(node, t.to, amount);
+      return { tx, amount: pas(amount), node, to: t.to };
+    });
+  }
+
+  const labTips: Array<{
+    step: string;
+    client: PerantoClient;
+    to: Address;
+    pas: string;
+  }> = [
+    { step: "disco.tip.carol→alice.lab", client: carol, to: alice.address, pas: "0.5" },
+    { step: "disco.tip.bob→alice.lab", client: bobClient, to: alice.address, pas: "0.5" },
+    { step: "disco.tip.carol→ecosystemlab", client: carol, to: labNode, pas: "1" },
+    { step: "disco.tip.dave→ecosystemlab", client: dave, to: labNode, pas: "0.75" },
+    { step: "disco.tip.erin→ecosystemlab", client: erin, to: labNode, pas: "0.5" },
+    { step: "disco.tip.dave→alice.lab", client: dave, to: alice.address, pas: "0.25" },
+  ];
+
+  for (const t of labTips) {
+    await tryStep(steps, t.step, async () => {
+      const amount = parseEther(t.pas);
+      const tx = await t.client.tip(labNode, t.to, amount);
+      return { tx, amount: pas(amount), node: labNode, to: t.to };
+    });
+  }
 
   // 4) Livelihood contribute (dave ×3 de 1 PAS)
   for (let i = 1; i <= 3; i++) {

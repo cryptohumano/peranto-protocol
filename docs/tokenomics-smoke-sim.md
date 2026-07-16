@@ -4,7 +4,11 @@ Simulación on-chain en **Paseo Hub TestNet** con las 6 cuentas smoke (25 PAS ca
 Script: `npm run smoke:disco` → `scripts/smoke-disco-vertices.ts`.  
 Teoría general: [tokenomics.md](./tokenomics.md) · [tokenomics-scenarios.md](./tokenomics-scenarios.md).
 
-Nodo: `Peranto` (`0x3bd67AC7…`). Periodo abierto: **25**.
+Nodos (post-redeploy Paseo):
+- **Peranto** `0x028A287dB4E63198dFa46F7c63a50aceFE4bE50e`
+- **EcosystemLab** `0xF2C0395933EbD381d8F6dCdb6211deb729f28dCD`
+
+Script: `npm run smoke:disco` → `scripts/smoke-disco-vertices.ts` (miembros, attestations, linktr33, Love/Care en ambos nodos).
 
 ---
 

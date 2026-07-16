@@ -1,12 +1,14 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useOutletContext } from "react-router-dom";
 import {
   BadgeCheck,
   Copy,
   ExternalLink,
   Eye,
+  GripVertical,
   Link2,
   Loader2,
+  QrCode,
   Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -16,6 +18,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { FieldHint, HelpCallout } from "@/components/HelpCallout";
 import { Linktr33Preview } from "@/components/Linktr33Preview";
+import { PublicPresentationCard } from "@/components/PublicPresentationCard";
 import {
   Sheet,
   SheetContent,
@@ -27,13 +30,19 @@ import {
   PAGE_PROFILE_TYPE,
   TIP_AMOUNT_PRESETS,
   DEFAULT_TIP_AMT,
+  LINK_KINDS,
   buildPublicPageShareUrl,
+  buildPageProfileSnapshot,
   encodePageProfile,
   extractPublicLinks,
   parsePageProfile,
   schemaShort,
   deriveServiceSlot,
-  maxServiceSlotLength,
+  publicLinkOrderKey,
+  sortPublicLinks,
+  reconcileLinkOrder,
+  suggestLinkLabel,
+  type LinkKindId,
   type PublicPageBadge,
   type PublicPageLink,
   type PublicPageProfile,
@@ -61,15 +70,6 @@ import {
 } from "@/lib/client";
 import type { SessionIdentity } from "@/lib/session";
 
-const LINK_PRESETS = [
-  { type: "LinkedDomains", hint: "Red / perfil (github, web, X…)" },
-  { type: "Website", hint: "Sitio principal" },
-  {
-    type: "CredentialInbox",
-    hint: "Email o URL de contacto — un email se abre como mailto:",
-  },
-] as const;
-
 type BadgeCandidate = {
   credHash: Hex;
   schemaKey: string;
@@ -88,14 +88,9 @@ type DraftLink = {
   pending: "none" | "add" | "remove";
 };
 
-function hrefToLabel(href: string, slot: string, type: string): string {
-  if (slot.trim()) return slot.trim();
-  if (/^mailto:/i.test(href)) return href.replace(/^mailto:/i, "");
-  try {
-    return new URL(href).hostname.replace(/^www\./, "");
-  } catch {
-    return type;
-  }
+function hrefToLabel(href: string, label: string): string {
+  if (label.trim()) return label.trim();
+  return suggestLinkLabel(href);
 }
 
 function normalizeHref(raw: string): string {
@@ -106,8 +101,11 @@ function normalizeHref(raw: string): string {
   return t;
 }
 
-function profileSnapshot(p: PublicPageProfile): string {
-  return encodePageProfile(p);
+function profileSnapshot(
+  p: PublicPageProfile,
+  linkAttrKeys: string[]
+): string {
+  return buildPageProfileSnapshot(p, linkAttrKeys);
 }
 
 export function MyPagePage() {
@@ -131,14 +129,19 @@ export function MyPagePage() {
   const [candidates, setCandidates] = useState<BadgeCandidate[]>([]);
   const [draftLinks, setDraftLinks] = useState<DraftLink[]>([]);
   const [publishedProfileJson, setPublishedProfileJson] = useState("");
-  const [linkType, setLinkType] = useState<string>("LinkedDomains");
-  const [linkSlot, setLinkSlot] = useState("");
+  const [linkKind, setLinkKind] = useState<LinkKindId>("github");
+  const [linkLabel, setLinkLabel] = useState("GitHub");
   const [linkUrl, setLinkUrl] = useState("");
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState("");
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [cardOpen, setCardOpen] = useState(false);
+  /** When true, next refresh ignores local pending-add drafts (post-publish). */
+  const clearPendingOnRefresh = useRef(false);
+  const dragLinkId = useRef<string | null>(null);
+  const [dragOverId, setDragOverId] = useState<string | null>(null);
 
   const shareRef = session.displayName
     ? `@${session.displayName}`
@@ -150,6 +153,20 @@ export function MyPagePage() {
   const publicPath = session.displayName
     ? `/u/@${session.displayName}`
     : `/u/${encodeURIComponent(session.did)}`;
+
+  const draftLinkAttrKeys = useMemo(
+    () =>
+      draftLinks
+        .filter((l) => l.pending !== "remove")
+        .map((l) =>
+          l.attrKey?.trim()
+            ? l.attrKey.trim()
+            : l.slot.trim()
+              ? `${l.type}.${l.slot.trim()}`
+              : publicLinkOrderKey(l)
+        ),
+    [draftLinks]
+  );
 
   const draftProfile: PublicPageProfile = useMemo(
     () => ({
@@ -164,6 +181,12 @@ export function MyPagePage() {
       showLoveInvite,
       loveNode: showLoveInvite && loveNode ? loveNode : undefined,
       loveDefaultAmt: showLoveInvite ? loveDefaultAmt : undefined,
+      linkOrder: reconcileLinkOrder(
+        draftLinks
+          .filter((l) => l.pending !== "remove")
+          .map((l) => publicLinkOrderKey(l)),
+        draftLinkAttrKeys
+      ),
     }),
     [
       title,
@@ -175,6 +198,8 @@ export function MyPagePage() {
       showLoveInvite,
       loveNode,
       loveDefaultAmt,
+      draftLinks,
+      draftLinkAttrKeys,
     ]
   );
 
@@ -193,16 +218,18 @@ export function MyPagePage() {
 
   const profileDirty =
     publishedProfileJson !== "" &&
-    profileSnapshot(draftProfile) !== publishedProfileJson;
+    profileSnapshot(draftProfile, draftLinkAttrKeys) !== publishedProfileJson;
 
   const linksToAdd = draftLinks.filter((l) => l.pending === "add");
   const linksToRemove = draftLinks.filter((l) => l.pending === "remove");
-  const linksToKeep = draftLinks.filter((l) => l.pending === "none");
+  const bareToClear = linksToAdd.filter(
+    (l) => l.attrKey && !l.attrKey.includes(".")
+  );
   const linksDirty = linksToAdd.length + linksToRemove.length > 0;
   const dirty = profileDirty || linksDirty;
-  /** When links change, re-write every kept link so RPC lookback can’t drop them. */
+  /** Only write new/removed links — cache + slotted attrs keep the rest stable. */
   const linkWriteCount = linksDirty
-    ? linksToKeep.length + linksToAdd.length + linksToRemove.length
+    ? linksToAdd.length + linksToRemove.length + bareToClear.length
     : 0;
   const txCount = (profileDirty ? 1 : 0) + linkWriteCount;
 
@@ -246,17 +273,12 @@ export function MyPagePage() {
     const resolvedAccent =
       p.accent ?? themeTokens(resolvedTheme).accent;
     const resolvedAmt = p.loveDefaultAmt ?? DEFAULT_TIP_AMT;
-    const published: PublicPageProfile = {
-      title: p.title,
-      bio: p.bio,
-      accent: resolvedAccent,
-      theme: resolvedTheme,
-      layout: resolvedLayout,
-      badges: p.badges ?? [],
-      showLoveInvite: showInvite,
-      loveNode: showInvite && resolvedLove ? resolvedLove : undefined,
-      loveDefaultAmt: showInvite ? resolvedAmt : undefined,
-    };
+
+    const publishedLinks = sortPublicLinks(
+      extractPublicLinks(list),
+      p.linkOrder
+    );
+    const linkAttrKeys = publishedLinks.map((l) => l.attrKey);
     setTitle(p.title ?? "");
     setBio(p.bio ?? "");
     setAccent(resolvedAccent);
@@ -265,44 +287,84 @@ export function MyPagePage() {
     setShowLoveInvite(showInvite);
     setLoveDefaultAmt(resolvedAmt);
     setBadges(p.badges ?? []);
-    setPublishedProfileJson(profileSnapshot(published));
+    setPublishedProfileJson(
+      profileSnapshot(
+        {
+          title: p.title,
+          bio: p.bio,
+          accent: resolvedAccent,
+          theme: resolvedTheme,
+          layout: resolvedLayout,
+          badges: p.badges,
+          showLoveInvite: showInvite,
+          loveNode: showInvite && resolvedLove ? resolvedLove : undefined,
+          loveDefaultAmt: p.loveDefaultAmt,
+          linkOrder: p.linkOrder,
+        },
+        linkAttrKeys
+      )
+    );
 
-    const publishedLinks = extractPublicLinks(list);
     setDraftLinks((prev) => {
-      const pendingAdds = prev.filter((l) => l.pending === "add");
+      const resetPending = clearPendingOnRefresh.current;
+      clearPendingOnRefresh.current = false;
+      const pendingAdds = resetPending
+        ? []
+        : prev.filter((l) => l.pending === "add");
       const removeKeys = new Set(
-        prev
-          .filter((l) => l.pending === "remove" && l.attrKey)
-          .map((l) => l.attrKey!.toLowerCase())
+        resetPending
+          ? []
+          : prev
+              .filter((l) => l.pending === "remove" && l.attrKey)
+              .map((l) => l.attrKey!.toLowerCase())
       );
       const fromChain: DraftLink[] = publishedLinks.map((l) => {
-        const slot = l.attrKey.includes(".")
+        const hasSlot = l.attrKey.includes(".");
+        const slot = hasSlot
           ? l.attrKey.slice(l.attrKey.indexOf(".") + 1)
-          : "";
+          : deriveServiceSlot(l.type, l.href, l.label);
+        const display =
+          l.label &&
+          l.label !== l.href &&
+          !/^https?:/i.test(l.label) &&
+          !l.label.includes("@") &&
+          !l.label.includes(".")
+            ? l.label
+            : suggestLinkLabel(l.href);
         const markedRemove = removeKeys.has(l.attrKey.toLowerCase());
+        // Bare attrKeys (no slot) must be rewritten or they keep overwriting
+        const needsRewrite = !hasSlot;
         return {
           id: l.attrKey,
           attrKey: l.attrKey,
           type: l.type,
           slot,
           href: l.href,
-          label: l.label,
-          pending: markedRemove ? ("remove" as const) : ("none" as const),
+          label: display,
+          pending: markedRemove
+            ? ("remove" as const)
+            : needsRewrite
+              ? ("add" as const)
+              : ("none" as const),
         };
       });
-      const chainKeys = new Set(
-        fromChain.map((l) => l.attrKey?.toLowerCase()).filter(Boolean)
-      );
       const keptAdds = pendingAdds.filter((a) => {
         const slot = a.slot.toLowerCase();
-        const key = `${a.type}.${a.slot}`.toLowerCase();
         return !fromChain.some(
-          (c) =>
-            c.type === a.type &&
-            c.slot.toLowerCase() === slot
-        ) && !chainKeys.has(key);
+          (c) => c.type === a.type && c.slot.toLowerCase() === slot
+        );
       });
-      return [...fromChain, ...keptAdds];
+      // Dedupe: if chain item marked add (rewrite) and pending add same slot, keep one
+      const seen = new Set(
+        fromChain.map((c) => `${c.type}.${c.slot}`.toLowerCase())
+      );
+      const extra = keptAdds.filter((a) => {
+        const k = `${a.type}.${a.slot}`.toLowerCase();
+        if (seen.has(k)) return false;
+        seen.add(k);
+        return true;
+      });
+      return [...fromChain, ...extra];
     });
 
     const local = await vault.list();
@@ -371,35 +433,61 @@ export function MyPagePage() {
     ]);
   }
 
+  function selectLinkKind(id: LinkKindId) {
+    const kind = LINK_KINDS.find((k) => k.id === id) ?? LINK_KINDS[0];
+    setLinkKind(kind.id);
+    if (kind.id !== "custom") {
+      setLinkLabel(kind.label);
+    }
+  }
+
   function queueAddLink() {
     const href = normalizeHref(linkUrl);
-    if (!href) return;
-    const slot = deriveServiceSlot(linkType, href, linkSlot);
-    const id = `draft-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-    // Avoid duplicate slots for same type in draft
-    const clash = draftLinks.some(
+    if (!href) {
+      setErr("Pega una URL o email");
+      return;
+    }
+    const kind = LINK_KINDS.find((k) => k.id === linkKind) ?? LINK_KINDS[0];
+    const type = kind.type;
+    const display = hrefToLabel(href, linkLabel || suggestLinkLabel(href));
+    if (!display.trim()) {
+      setErr("Elige o escribe el texto del botón (ej. Telegram, Blog, Mail)");
+      return;
+    }
+    // Slot from the button label so several Website (or LinkedDomains) links
+    // can coexist — e.g. "Blog" + "Lab", not both locked to kind.slot "website".
+    const slot = deriveServiceSlot(type, href, display);
+
+    const clash = draftLinks.find(
       (l) =>
         l.pending !== "remove" &&
-        l.type === linkType &&
+        l.type === type &&
         l.slot.toLowerCase() === slot.toLowerCase()
     );
-    const uniqueSlot = clash
-      ? `${slot.slice(0, Math.max(1, maxServiceSlotLength(linkType) - 2))}${Math.floor(Math.random() * 90 + 10)}`
-      : slot;
+    if (clash) {
+      setErr(
+        clash.label.toLowerCase() === display.toLowerCase()
+          ? `Ya tienes un botón “${clash.label}”. Usa otra etiqueta o quita el anterior.`
+          : `La etiqueta “${display}” choca con “${clash.label}” (mismo id interno). Usa otra, p. ej. Blog o Lab.`
+      );
+      return;
+    }
+
+    const id = `draft-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     setDraftLinks((prev) => [
       ...prev,
       {
         id,
-        type: linkType,
-        slot: uniqueSlot,
+        type,
+        slot,
         href,
-        label: hrefToLabel(href, uniqueSlot, linkType),
+        label: display,
         pending: "add",
       },
     ]);
     setLinkUrl("");
-    setLinkSlot("");
-    setMsg("Link añadido al borrador (aún no on-chain)");
+    if (kind.id === "custom") setLinkLabel("");
+    setMsg(`Listo: en la página se verá el botón “${display}”`);
     setErr("");
   }
 
@@ -423,6 +511,21 @@ export function MyPagePage() {
     );
   }
 
+  function reorderDraftLink(fromId: string, toId: string) {
+    if (fromId === toId) return;
+    setDraftLinks((prev) => {
+      const from = prev.findIndex((l) => l.id === fromId);
+      const to = prev.findIndex((l) => l.id === toId);
+      if (from < 0 || to < 0) return prev;
+      const next = [...prev];
+      const [item] = next.splice(from, 1);
+      next.splice(to, 0, item);
+      return next;
+    });
+    setMsg("Orden actualizado en el borrador — publica para guardarlo on-chain");
+    setErr("");
+  }
+
   async function publishAll() {
     if (!dirty || txCount === 0) {
       setMsg("No hay cambios pendientes");
@@ -438,16 +541,21 @@ export function MyPagePage() {
         setProgress(`Tx ${step}/${txCount}: personalización (PerantoPage)`);
         await portalSetDidService(
           PAGE_PROFILE_TYPE,
-          encodePageProfile(draftProfile),
+          encodePageProfile({
+            ...draftProfile,
+            linkOrder: reconcileLinkOrder(
+              draftProfile.linkOrder,
+              draftLinkAttrKeys
+            ),
+          }),
           session
         );
       }
       if (linksDirty) {
-        // Re-assert every link we want to keep (avoids “vanishing” after RPC lookback)
-        for (const l of [...linksToKeep, ...linksToAdd]) {
+        for (const l of linksToAdd) {
           step += 1;
           setProgress(`Tx ${step}/${txCount}: link ${l.label}`);
-          const slot = l.slot.trim() || deriveServiceSlot(l.type, l.href);
+          const slot = l.slot.trim() || deriveServiceSlot(l.type, l.href, l.label);
           await portalSetDidService(
             l.type,
             l.href,
@@ -455,6 +563,12 @@ export function MyPagePage() {
             slot,
             l.label || slot
           );
+          // Legacy bare attr (LinkedDomains without .slot) → clear after slotted write
+          if (l.attrKey && !l.attrKey.includes(".")) {
+            step += 1;
+            setProgress(`Tx ${step}/${txCount}: limpiar legado ${l.attrKey}`);
+            await portalClearDidService(l.attrKey, session);
+          }
         }
         for (const l of linksToRemove) {
           if (!l.attrKey) continue;
@@ -467,6 +581,7 @@ export function MyPagePage() {
       setMsg(
         `Publicado: ${txCount} transacción${txCount === 1 ? "" : "es"} on-chain`
       );
+      clearPendingOnRefresh.current = true;
       await refresh();
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
@@ -483,6 +598,7 @@ export function MyPagePage() {
       badges={badges}
       handle={session.displayName ?? null}
       titleFallback={titleFallback}
+      dirty={dirty}
     />
   );
 
@@ -527,6 +643,37 @@ export function MyPagePage() {
             <Copy className="size-3.5" />
             Copiar URL
           </Button>
+          <Sheet open={cardOpen} onOpenChange={setCardOpen}>
+            <SheetTrigger
+              render={<Button size="sm" variant="outline" type="button" />}
+            >
+              <QrCode className="size-3.5" />
+              QR evento
+            </SheetTrigger>
+            <SheetContent side="bottom" className="max-h-[90vh] overflow-y-auto">
+              <SheetHeader>
+                <SheetTitle>Tarjeta de presentación</SheetTitle>
+              </SheetHeader>
+              <div className="px-4 pb-8">
+                <p className="mb-4 text-sm text-muted-foreground">
+                  Muéstralo en el evento. Quien escanee abre tu linktr33 y puede
+                  guardar el contacto o descargar un vCard.
+                </p>
+                <PublicPresentationCard
+                  shareUrl={shareUrl}
+                  title={title.trim() || titleFallback}
+                  handle={
+                    session.displayName ? `@${session.displayName}` : null
+                  }
+                  did={session.did}
+                  address={session.address}
+                  links={visibleLinks}
+                  bio={bio}
+                  size="lg"
+                />
+              </div>
+            </SheetContent>
+          </Sheet>
           <Link to={publicPath} target="_blank" rel="noreferrer">
             <Button size="sm" variant="outline" type="button">
               <ExternalLink className="size-3.5" />
@@ -536,14 +683,21 @@ export function MyPagePage() {
         </div>
       </div>
 
-      <HelpCallout title="Transparencia de gas">
+      <HelpCallout title="Cómo funciona">
         <p>
-          Cada cambio en el DID es una tx. Aquí acumulas perfil, badges, tema y
-          links en local; al publicar verás{" "}
-          <strong>
-            {dirty ? `${txCount} tx` : "0 tx (sin cambios)"}
-          </strong>
-          .
+          Edita con calma: nada se cobra hasta{" "}
+          <strong>Publicar todo</strong>. Los links usan un texto de botón
+          (Telegram, Website, Mail…) — no la URL cruda. PerantoPage y servicios
+          DID no cobran fee al protocolo (solo gas de red); anclar credenciales
+          o registrar nombre sí van al tesoro. Esas txs aparecen en{" "}
+          <strong>Actividad</strong> tras sincronizar.
+          {dirty ? (
+            <>
+              {" "}
+              Ahora mismo: <strong>{txCount} transacción(es)</strong> al
+              publicar.
+            </>
+          ) : null}
         </p>
       </HelpCallout>
 
@@ -780,47 +934,82 @@ export function MyPagePage() {
           <Card>
             <CardTitle>Links</CardTitle>
             <CardDesc>
-              Se encolan en el borrador. Al publicar un cambio de links se
-              reescriben todos los que quieras conservar (así no se “pierden”
-              LinkedIn/GitHub al añadir Telegram).
+              Elige el tipo, pega la URL y revisa el texto del botón. Eso es lo
+              que verá la gente en tu página pública. Varios websites: cambia la
+              etiqueta (Blog, Lab, D…) — no dejes todas en “Website”. Arrastra
+              el asa para ordenar; el orden se guarda en PerantoPage al publicar.
             </CardDesc>
-            <div className="mt-3 flex flex-wrap gap-1">
-              {LINK_PRESETS.map((p) => (
-                <Button
-                  key={p.type}
-                  size="sm"
-                  variant={linkType === p.type ? "default" : "secondary"}
-                  onClick={() => setLinkType(p.type)}
+
+            {draftLinks.some(
+              (l) => l.pending === "add" && l.attrKey && !l.attrKey.includes(".")
+            ) && (
+              <p className="mt-3 rounded-xl border border-[#c4a35a]/40 bg-[#c4a35a]/10 px-3 py-2 text-xs text-[var(--color-moss-deep)]">
+                Detectamos links antiguos sin etiqueta. Al{" "}
+                <strong>Publicar todo</strong> se corrigen solos (Telegram,
+                Website, Mail…) y dejan de pisarse entre sí.
+              </p>
+            )}
+
+            <Label className="mt-3">Tipo de link</Label>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {LINK_KINDS.map((k) => (
+                <button
+                  key={k.id}
+                  type="button"
+                  onClick={() => selectLinkKind(k.id)}
+                  className={cn(
+                    "rounded-full border px-3 py-1.5 text-xs font-medium",
+                    linkKind === k.id
+                      ? "border-[var(--color-moss)] bg-[var(--color-moss)]/10 text-[var(--color-moss-deep)]"
+                      : "border-[var(--color-moss)]/20 text-muted-foreground hover:border-[var(--color-moss)]/40"
+                  )}
                 >
-                  {p.type}
-                </Button>
+                  {k.id === "custom" ? "Otro" : k.label}
+                </button>
               ))}
             </div>
-            <FieldHint className="mt-2">
-              {LINK_PRESETS.find((p) => p.type === linkType)?.hint} Si no pones
-              etiqueta, se deriva del dominio/email (hace falta un slot único:
-              sin él, el mismo tipo sobrescribe el link anterior).
-            </FieldHint>
-            <Label className="mt-2">Etiqueta / slot</Label>
-            <Input
-              value={linkSlot}
-              onChange={(e) => setLinkSlot(e.target.value)}
-              placeholder="github · web · x"
-            />
-            <Label className="mt-2">URL o email</Label>
+
+            <Label className="mt-3">URL o email</Label>
             <Input
               value={linkUrl}
-              onChange={(e) => setLinkUrl(e.target.value)}
+              onChange={(e) => {
+                const v = e.target.value;
+                setLinkUrl(v);
+                if (linkKind === "custom" || !linkLabel.trim()) {
+                  const href = normalizeHref(v);
+                  if (href) setLinkLabel(suggestLinkLabel(href));
+                }
+              }}
               placeholder={
-                linkType === "CredentialInbox"
-                  ? "hola@ejemplo.org o https://…"
-                  : "https://…"
+                LINK_KINDS.find((k) => k.id === linkKind)?.placeholder ??
+                "https://…"
               }
             />
+
+            <Label className="mt-3">Texto del botón (obligatorio)</Label>
+            <Input
+              value={linkLabel}
+              onChange={(e) => setLinkLabel(e.target.value)}
+              placeholder="Telegram · Website · Mail · GitHub…"
+              maxLength={48}
+            />
+            <FieldHint>
+              Así se muestra en tu linktr33. No uses la URL completa como texto.
+            </FieldHint>
+
+            {linkLabel.trim() && linkUrl.trim() && (
+              <p className="mt-2 text-xs text-muted-foreground">
+                Vista del botón:{" "}
+                <span className="inline-flex rounded-lg border border-[var(--color-moss)]/20 bg-[var(--color-mist)]/50 px-2.5 py-1 font-semibold text-[var(--color-moss-deep)]">
+                  {linkLabel.trim()}
+                </span>
+              </p>
+            )}
+
             <Button
               className="mt-3"
               variant="secondary"
-              disabled={busy || !linkUrl.trim()}
+              disabled={busy || !linkUrl.trim() || !linkLabel.trim()}
               onClick={queueAddLink}
             >
               <Link2 className="size-3.5" />
@@ -829,30 +1018,72 @@ export function MyPagePage() {
 
             <ul className="mt-4 space-y-2">
               {draftLinks.length === 0 && (
-                <p className="text-sm text-muted-foreground">Ningún link.</p>
+                <p className="text-sm text-muted-foreground">
+                  Ningún link aún. Empieza por GitHub, Website o Mail.
+                </p>
               )}
               {draftLinks.map((l) => (
                 <li
                   key={l.id}
+                  draggable={!busy}
+                  onDragStart={(e) => {
+                    dragLinkId.current = l.id;
+                    e.dataTransfer.effectAllowed = "move";
+                    e.dataTransfer.setData("text/plain", l.id);
+                  }}
+                  onDragEnd={() => {
+                    dragLinkId.current = null;
+                    setDragOverId(null);
+                  }}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = "move";
+                    if (dragOverId !== l.id) setDragOverId(l.id);
+                  }}
+                  onDragLeave={() => {
+                    if (dragOverId === l.id) setDragOverId(null);
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    const from =
+                      dragLinkId.current ||
+                      e.dataTransfer.getData("text/plain");
+                    setDragOverId(null);
+                    if (from) reorderDraftLink(from, l.id);
+                    dragLinkId.current = null;
+                  }}
                   className={cn(
-                    "flex items-center justify-between gap-2 rounded-xl border px-3 py-2",
+                    "flex items-center gap-2 rounded-xl border px-2 py-2.5 transition",
                     l.pending === "add" &&
                       "border-[var(--color-moss)]/40 bg-[var(--color-moss)]/5",
                     l.pending === "remove" &&
-                      "border-[var(--color-danger)]/30 opacity-60"
+                      "border-[var(--color-danger)]/30 opacity-60",
+                    dragOverId === l.id &&
+                      "border-[var(--color-moss)] ring-1 ring-[var(--color-moss)]/30"
                   )}
                 >
-                  <div className="min-w-0">
+                  <button
+                    type="button"
+                    className="cursor-grab touch-none rounded-md p-1 text-muted-foreground hover:bg-black/[0.04] active:cursor-grabbing"
+                    aria-label={`Arrastrar ${l.label}`}
+                    disabled={busy}
+                    onMouseDown={(e) => e.stopPropagation()}
+                  >
+                    <GripVertical className="size-4" />
+                  </button>
+                  <div className="min-w-0 flex-1">
                     <p
                       className={cn(
-                        "truncate text-sm font-semibold capitalize",
+                        "truncate text-sm font-semibold",
                         l.pending === "remove" && "line-through"
                       )}
                     >
                       {l.label}
                       {l.pending === "add" && (
                         <span className="ml-2 text-[10px] font-normal text-[var(--color-moss)]">
-                          nuevo
+                          {l.attrKey && !l.attrKey.includes(".")
+                            ? "se corregirá al publicar"
+                            : "nuevo"}
                         </span>
                       )}
                       {l.pending === "remove" && (
@@ -930,8 +1161,7 @@ export function MyPagePage() {
                 {linksDirty && (
                   <span className="text-xs">
                     {" "}
-                    · links sync {linksToKeep.length + linksToAdd.length} / −
-                    {linksToRemove.length}
+                    · links +{linksToAdd.length} / −{linksToRemove.length}
                   </span>
                 )}
               </>

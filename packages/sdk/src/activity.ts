@@ -6,6 +6,8 @@ export type ActivityTxType =
   | "name.release"
   | "vc.anchor"
   | "vc.revoke"
+  | "did.service"
+  | "did.service.clear"
   | "disco.create"
   | "disco.tip"
   | "disco.contribute"
@@ -21,6 +23,8 @@ export const ACTIVITY_TX_LABELS: Record<ActivityTxType, string> = {
   "name.release": "Nombre liberado",
   "vc.anchor": "Credencial anclada",
   "vc.revoke": "Credencial revocada",
+  "did.service": "Servicio DID",
+  "did.service.clear": "Servicio DID quitado",
   "disco.create": "Nodo creado",
   "disco.tip": "Tip",
   "disco.contribute": "Contribute",

@@ -147,11 +147,14 @@ async function main() {
   // 4) Tip a known node + scores
   let node: Address | null =
     (addresses.PerantoNode as Address | null | undefined) ?? null;
+  const labNode =
+    (addresses.EcosystemLabNode as Address | null | undefined) ?? null;
   if (!node || node === "0x0000000000000000000000000000000000000000") {
     const list = await client.listNodes();
     node = (list[0] as Address | undefined) ?? null;
   }
-  if (!node) {
+  const tipTarget = labNode ?? node;
+  if (!tipTarget) {
     steps.push({
       step: "disco.tip",
       ok: false,
@@ -159,14 +162,16 @@ async function main() {
     });
   } else {
     try {
-      const tipTx = await client.tip(node, me, parseEther("0.001"));
-      const scores = await client.scores(node, me);
+      const tipTx = await client.tip(tipTarget, tipTarget, parseEther("0.01"));
+      const scores = await client.scores(tipTarget, me);
       steps.push({
         step: "disco.tip",
         ok: true,
-        node,
+        node: tipTarget,
+        perantoNode: node,
+        ecosystemLabNode: labNode,
         tipTx,
-        tipValue: "0.001 PAS",
+        tipValue: "0.01 PAS",
         scores: {
           love: scores.love.toString(),
           care: scores.care.toString(),

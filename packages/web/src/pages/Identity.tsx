@@ -359,7 +359,9 @@ export function IdentityPage() {
                       disabled={busy}
                       onClick={() =>
                         runLookup(async () => {
-                          const doc = await portalResolveDid(lookupResult.did);
+                          const doc = await portalResolveDid(lookupResult.did, {
+                            useCache: false,
+                          });
                           setForeignDidDoc(doc);
                           setMsg(
                             `Documento de ${lookupResult.did.slice(0, 28)}…`
