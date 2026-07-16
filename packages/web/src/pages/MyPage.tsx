@@ -299,20 +299,21 @@ export function MyPagePage() {
           showLoveInvite: showInvite,
           loveNode: showInvite && resolvedLove ? resolvedLove : undefined,
           loveDefaultAmt: p.loveDefaultAmt,
-          linkOrder: p.linkOrder,
+          linkOrder: reconcileLinkOrder(p.linkOrder, linkAttrKeys),
         },
         linkAttrKeys
       )
     );
 
+    const discardLocalPending = clearPendingOnRefresh.current;
+    clearPendingOnRefresh.current = false;
+
     setDraftLinks((prev) => {
-      const resetPending = clearPendingOnRefresh.current;
-      clearPendingOnRefresh.current = false;
-      const pendingAdds = resetPending
+      const pendingAdds = discardLocalPending
         ? []
         : prev.filter((l) => l.pending === "add");
       const removeKeys = new Set(
-        resetPending
+        discardLocalPending
           ? []
           : prev
               .filter((l) => l.pending === "remove" && l.attrKey)
@@ -332,7 +333,6 @@ export function MyPagePage() {
             ? l.label
             : suggestLinkLabel(l.href);
         const markedRemove = removeKeys.has(l.attrKey.toLowerCase());
-        // Bare attrKeys (no slot) must be rewritten or they keep overwriting
         const needsRewrite = !hasSlot;
         return {
           id: l.attrKey,
@@ -349,12 +349,12 @@ export function MyPagePage() {
         };
       });
       const keptAdds = pendingAdds.filter((a) => {
+        if (a.id.startsWith("draft-")) return true;
         const slot = a.slot.toLowerCase();
         return !fromChain.some(
           (c) => c.type === a.type && c.slot.toLowerCase() === slot
         );
       });
-      // Dedupe: if chain item marked add (rewrite) and pending add same slot, keep one
       const seen = new Set(
         fromChain.map((c) => `${c.type}.${c.slot}`.toLowerCase())
       );
@@ -939,6 +939,13 @@ export function MyPagePage() {
               etiqueta (Blog, Lab, D…) — no dejes todas en “Website”. Arrastra
               el asa para ordenar; el orden se guarda en PerantoPage al publicar.
             </CardDesc>
+
+            {draftLinks.filter((l) => l.pending !== "remove").length === 0 && (
+              <p className="mt-3 rounded-xl border border-[var(--color-moss)]/25 bg-[var(--color-moss)]/8 px-3 py-2 text-xs text-[var(--color-moss-deep)]">
+                No hay links en tu DID on-chain (solo PerantoPage). Añade los
+                canales abajo y pulsa <strong>Publicar todo</strong>.
+              </p>
+            )}
 
             {draftLinks.some(
               (l) => l.pending === "add" && l.attrKey && !l.attrKey.includes(".")

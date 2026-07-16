@@ -8,9 +8,14 @@ type CachedSvc = {
   name?: string;
 };
 
+const PAGE_TYPES = new Set(["PerantoPage"]);
+
 function cacheKey(registry: string, did: string): string {
-  // v2: stores display name; old v1 keys ignored (drops zombie bare attrs)
   return `peranto:did-svc-v2:${registry.toLowerCase()}:${did.toLowerCase()}`;
+}
+
+function recentKey(did: string): string {
+  return `peranto:did-svc-recent:${did.toLowerCase()}`;
 }
 
 function readCache(registry: string, did: string): CachedSvc[] {
@@ -25,12 +30,55 @@ function readCache(registry: string, did: string): CachedSvc[] {
   }
 }
 
+function readRecentAttrKeys(did: string): Set<string> {
+  if (typeof sessionStorage === "undefined") return new Set();
+  try {
+    const raw = sessionStorage.getItem(recentKey(did));
+    if (!raw) return new Set();
+    const parsed = JSON.parse(raw) as string[];
+    return new Set(
+      Array.isArray(parsed) ? parsed.map((k) => k.toLowerCase()) : []
+    );
+  } catch {
+    return new Set();
+  }
+}
+
+function writeRecentAttrKeys(did: string, keys: Iterable<string>) {
+  if (typeof sessionStorage === "undefined") return;
+  try {
+    sessionStorage.setItem(
+      recentKey(did),
+      JSON.stringify([...new Set([...keys].map((k) => k.toLowerCase()))])
+    );
+  } catch {
+    /* quota */
+  }
+}
+
+function markRecentAttrKey(did: string, attrKey: string) {
+  const set = readRecentAttrKeys(did);
+  set.add(attrKey.toLowerCase());
+  writeRecentAttrKeys(did, set);
+}
+
+function forgetRecentAttrKey(did: string, attrKey: string) {
+  const set = readRecentAttrKeys(did);
+  set.delete(attrKey.toLowerCase());
+  writeRecentAttrKeys(did, set);
+}
+
+function isLinkService(s: DidService): boolean {
+  if (!s.attrKey) return false;
+  if (PAGE_TYPES.has(s.type) || s.attrKey.startsWith("PerantoPage")) return false;
+  return true;
+}
+
 function writeCache(registry: string, did: string, services: DidService[]) {
   if (typeof localStorage === "undefined") return;
   const payload: CachedSvc[] = [];
   for (const s of services) {
-    if (!s.attrKey || s.type === "PerantoPage") continue;
-    if (s.attrKey.startsWith("PerantoPage")) continue;
+    if (!s.attrKey || !isLinkService(s)) continue;
     payload.push({
       attrKey: s.attrKey,
       type: s.type,
@@ -68,20 +116,40 @@ function isSlotted(attrKey: string): boolean {
   return attrKey.includes(".");
 }
 
+/** Drop cached link rows — chain is authoritative (fixes ghost links in /page). */
+export function resetDidServiceCache(registry: string, did: string, doc: DidDocument) {
+  writeCache(registry, did, doc.service ?? []);
+  const chainKeys = (doc.service ?? [])
+    .filter(isLinkService)
+    .map((s) => s.attrKey!.toLowerCase());
+  const recent = readRecentAttrKeys(did);
+  for (const k of [...recent]) {
+    if (!chainKeys.includes(k)) forgetRecentAttrKey(did, k);
+  }
+}
+
 /**
  * Merge chain-resolved services with local cache so RPC lookback gaps don’t drop links.
  *
- * Rules (v2):
- * - Chain wins for the same attrKey
- * - Cache may only restore *slotted* keys missing from chain (never bare `Website` / `LinkedDomains`)
- * - Don’t restore a cached endpoint if chain already has that URL under any key
+ * Rules (v3):
+ * - Chain always wins for the same attrKey
+ * - If chain has **no** link services, never restore from cache (no ghosts)
+ * - Otherwise restore only slotted keys published this session (`recent`) missing from chain
  */
 export function mergeDidDocumentServices(
   registry: string,
   doc: DidDocument
 ): DidDocument {
   const fromChain = doc.service ?? [];
+  const chainLinks = fromChain.filter(isLinkService);
+
+  if (chainLinks.length === 0) {
+    resetDidServiceCache(registry, doc.id, doc);
+    return doc;
+  }
+
   const cached = readCache(registry, doc.id);
+  const recent = readRecentAttrKeys(doc.id);
   const byKey = new Map<string, DidService>();
   const hrefs = new Set<string>();
 
@@ -94,9 +162,8 @@ export function mergeDidDocumentServices(
 
   for (const c of cached) {
     if (!c.attrKey || byKey.has(c.attrKey)) continue;
-    // Never resurrect legacy bare attrs — they overwrite each other on-chain
-    // and linger in cache after clear/migrate to Type.slot
     if (!isSlotted(c.attrKey)) continue;
+    if (!recent.has(c.attrKey.toLowerCase())) continue;
     const h = hrefKey(c.serviceEndpoint);
     if (h && hrefs.has(h)) continue;
     byKey.set(c.attrKey, {
@@ -120,6 +187,7 @@ export function rememberDidService(
   svc: DidService
 ) {
   if (!svc.attrKey) return;
+  markRecentAttrKey(did, svc.attrKey);
   const byKey = new Map<string, DidService>();
   for (const c of readCache(registry, did)) {
     byKey.set(c.attrKey, {
@@ -139,6 +207,7 @@ export function forgetDidService(
   did: string,
   attrKey: string
 ) {
+  forgetRecentAttrKey(did, attrKey);
   const next = readCache(registry, did).filter(
     (c) => c.attrKey.toLowerCase() !== attrKey.toLowerCase()
   );
