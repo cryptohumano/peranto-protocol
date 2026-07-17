@@ -128,6 +128,31 @@ async function ensureMember(
   });
 }
 
+async function ensureAttesterSchema(
+  steps: Array<Record<string, unknown>>,
+  lab: PerantoClient,
+  schemaKey: string
+) {
+  const authorized = await lab.isAuthorized(lab.accountAddress!, schemaKey);
+  if (authorized) {
+    steps.push({
+      step: `attester.stakeAndJoin.${schemaKey}`,
+      ok: true,
+      skipped: true,
+      schemaKey,
+    });
+    return;
+  }
+  await tryStep(steps, `attester.stakeAndJoin.${schemaKey}`, async () => {
+    const join = await lab.stakeAndJoin(schemaKey);
+    return {
+      schemaKey,
+      schemaId: join.schemaId,
+      txHash: join.txHash,
+    };
+  });
+}
+
 async function publishLinktr33(
   steps: Array<Record<string, unknown>>,
   client: PerantoClient,
@@ -289,16 +314,7 @@ async function main() {
 
   // 2) Attester + Member VC (Alice) + recordAnchor en ambos nodos
   const schemaKey = "peranto:Member:v1";
-  await tryStep(steps, "attester.stakeAndJoin", async () => {
-    const authorized = await lab.isAuthorized(lab.accountAddress!, schemaKey);
-    if (authorized) return { skipped: true, schemaKey };
-    const join = await lab.stakeAndJoin(schemaKey);
-    return {
-      schemaKey,
-      schemaId: join.schemaId,
-      txHash: join.txHash,
-    };
-  });
+  await ensureAttesterSchema(steps, lab, schemaKey);
 
   // Lab ya es miembro (ensureMember arriba)
 
@@ -334,7 +350,10 @@ async function main() {
     });
   }
 
-  // 2b) EcoTestResult + CareContribution (Alice)
+  // 2b) EcoTestResult + CareContribution (Alice) — cada schema requiere stakeAndJoin
+  const ecoSchema = "peranto:EcoTestResult:v1";
+  const careSchema = "peranto:CareContribution:v1";
+  await ensureAttesterSchema(steps, lab, ecoSchema);
   await tryStep(steps, "vc.issueAndAnchor.alice.eco", async () => {
     const issued = await lab.issueAndAnchorClaims(
       alice.address,
@@ -352,6 +371,7 @@ async function main() {
     return { credHash: issued.credHash, anchorTx: issued.anchorTx };
   });
 
+  await ensureAttesterSchema(steps, lab, careSchema);
   await tryStep(steps, "vc.issueAndAnchor.alice.care", async () => {
     const issued = await lab.issueAndAnchorClaims(
       alice.address,

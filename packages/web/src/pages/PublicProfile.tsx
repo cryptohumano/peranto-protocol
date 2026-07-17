@@ -54,7 +54,9 @@ export function PublicProfilePage() {
       setErr("");
       try {
         const resolved = await portalResolveIdentityRef(ref);
-        const doc = await portalResolveDid(resolved.did, { useCache: false });
+        // Prefer warm sync for this DID when the browser already has a seed
+        // (e.g. after editing /page). First visit still does a wide cold lookback.
+        const doc = await portalResolveDid(resolved.did);
         if (cancelled) return;
         const { profile: p, links: L } = profileFromDocument(doc);
         setDid(resolved.did);
@@ -85,11 +87,9 @@ export function PublicProfilePage() {
           })
         );
         if (!cancelled) {
-          setBadges(
-            resolvedBadges.filter(
-              (b) => b.status === "Active" || b.status === "Revoked"
-            )
-          );
+          // Show all featured; non-Active stay visible but muted so owners
+          // understand “en PerantoPage pero sin ancla en este registry”.
+          setBadges(resolvedBadges);
         }
       } catch (e) {
         if (!cancelled) {
@@ -255,10 +255,17 @@ export function PublicProfilePage() {
                   {badges.map((b) => (
                     <span
                       key={b.credHash}
-                      title={`${b.schemaKey} · ${b.credHash}`}
+                      title={
+                        b.status === "Active"
+                          ? `${b.schemaKey} · ${b.credHash}`
+                          : b.status === "None"
+                            ? "Sin ancla Active en el registry actual (¿deploy anterior?)"
+                            : `${b.schemaKey} · ${b.status}`
+                      }
                       className={cn(
                         "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold",
-                        b.status !== "Active" && "opacity-45 line-through"
+                        b.status !== "Active" && "opacity-45",
+                        b.status === "Revoked" && "line-through"
                       )}
                       style={{
                         borderColor: theme.badgeBorder,
@@ -274,6 +281,11 @@ export function PublicProfilePage() {
                       {b.status === "Revoked" && (
                         <span className="text-[10px] font-normal">
                           revocada
+                        </span>
+                      )}
+                      {(b.status === "None" || b.status === "Unknown") && (
+                        <span className="text-[10px] font-normal">
+                          sin ancla
                         </span>
                       )}
                     </span>

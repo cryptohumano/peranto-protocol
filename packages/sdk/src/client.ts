@@ -54,7 +54,12 @@ import {
   type EcoTestClaims,
   type IssuedCredential,
 } from "./vc";
-import { getContractEventsChunked, labelHashOf, scanNativeTransfers } from "./logs";
+import {
+  getContractEventsChunked,
+  getContractEventsChunkedDetailed,
+  labelHashOf,
+  scanNativeTransfers,
+} from "./logs";
 import {
   ACTIVITY_TX_LABELS,
   type ActivityTx,
@@ -71,6 +76,25 @@ export type ContractAddresses = {
   DisCOFactory?: Address;
   PerantoNode?: Address | null;
   EcosystemLabNode?: Address | null;
+};
+
+/** Options for log-based DID service reconstruction. */
+export type CollectDidServicesOpts = {
+  lookback?: bigint;
+  chunkSize?: bigint;
+  fromBlock?: bigint;
+  toBlock?: bigint;
+  concurrency?: number;
+  /**
+   * Prior active services (incremental sync). Merged with new logs in the
+   * `[fromBlock, toBlock]` window — use with `fromBlock = lastSynced + 1`.
+   */
+  seedServices?: DidService[];
+};
+
+export type CollectDidServicesResult = {
+  services: DidService[];
+  syncedToBlock: bigint;
 };
 
 const paseoChain = {
@@ -97,7 +121,7 @@ function chainFor(network: PerantoNetwork) {
     case "hardhat":
     case "localhost":
     default:
-      return hardhat;
+  return hardhat;
   }
 }
 
@@ -142,36 +166,83 @@ export class PerantoClient {
     return this.walletClient?.account?.address;
   }
 
-  async resolveDid(did: string): Promise<DidDocument> {
+  async resolveDid(
+    did: string,
+    opts?: CollectDidServicesOpts
+  ): Promise<DidDocument> {
     const { address } = parseDid(did);
-    const deactivated = await this.publicClient.readContract({
-      address: this.addresses.DIDRegistry,
-      abi: didRegistryAbi,
-      functionName: "deactivated",
-      args: [address],
-    });
-    const services = await this.collectDidServices(did, address);
-    return resolveDidMinimal(did, Boolean(deactivated), services);
+    const [deactivated, collected] = await Promise.all([
+      this.publicClient.readContract({
+        address: this.addresses.DIDRegistry,
+        abi: didRegistryAbi,
+        functionName: "deactivated",
+        args: [address],
+      }),
+      this.collectDidServices(did, address, opts),
+    ]);
+    return resolveDidMinimal(did, Boolean(deactivated), collected.services);
   }
 
   /**
    * Rebuild active DID services from `DIDAttributeChanged` events
    * (`did/svc/<Type>` keys). Uses a wide lookback — Paseo RPCs reject genesis queries.
+   *
+   * Pass `fromBlock` + `seedServices` for incremental sync after a prior scan.
    */
-  async collectDidServices(did: string, identity: Address): Promise<DidService[]> {
-    const logs = await getContractEventsChunked(this.publicClient, {
-      address: this.addresses.DIDRegistry,
-      abi: didRegistryAbi,
-      eventName: "DIDAttributeChanged",
-      args: { identity },
-      // ~30d @ 6s/block — short windows make older linktr33 services “vanish”
-      lookback: 500_000n,
-      chunkSize: 4_000n,
+  async collectDidServices(
+    did: string,
+    identity: Address,
+    opts?: CollectDidServicesOpts
+  ): Promise<CollectDidServicesResult> {
+    const cold = opts?.fromBlock === undefined;
+    const { logs, toBlock } = await getContractEventsChunkedDetailed(
+      this.publicClient,
+      {
+        address: this.addresses.DIDRegistry,
+        abi: didRegistryAbi,
+        eventName: "DIDAttributeChanged",
+        args: { identity },
+        // ~30d @ 6s/block — short windows make older linktr33 services “vanish”
+        lookback: opts?.lookback ?? (cold ? 500_000n : undefined),
+        chunkSize: opts?.chunkSize ?? 4_000n,
+        fromBlock: opts?.fromBlock,
+        toBlock: opts?.toBlock,
+        concurrency: opts?.concurrency ?? 8,
+      }
+    );
+
+    // Sort so later blocks overwrite earlier ones when merging into a seed map
+    const ordered = [...logs].sort((a, b) => {
+      const ba = a.blockNumber ?? 0n;
+      const bb = b.blockNumber ?? 0n;
+      if (ba !== bb) return ba < bb ? -1 : 1;
+      const la = a.logIndex ?? 0;
+      const lb = b.logIndex ?? 0;
+      return la - lb;
     });
+
     const now = Math.floor(Date.now() / 1000);
-    // Latest write per attribute name wins
     const latest = new Map<string, { value: Hex; validTo: number }>();
-    for (const log of logs) {
+
+    if (!cold && opts?.seedServices?.length) {
+      for (const s of opts.seedServices) {
+        if (!s.attrKey) continue;
+        const nameStr = `did/svc/${s.attrKey}`;
+        // Seed as still-valid; real clears arrive via new logs
+        const payload = encodeDidServiceValue({
+          id: s.id,
+          type: s.type,
+          serviceEndpoint: s.serviceEndpoint,
+          name: s.name,
+        });
+        latest.set(nameStr, {
+          value: payload,
+          validTo: now + 60 * 60 * 24 * 365 * 100,
+        });
+      }
+    }
+
+    for (const log of ordered) {
       const args = (log as { args?: { name?: Hex; value?: Hex; validTo?: bigint } })
         .args;
       if (!args?.name || args.value === undefined || args.validTo === undefined) {
@@ -184,6 +255,7 @@ export class PerantoClient {
         validTo: Number(args.validTo),
       });
     }
+
     const out: DidService[] = [];
     for (const [nameStr, entry] of latest) {
       if (entry.validTo <= now) continue;
@@ -191,7 +263,6 @@ export class PerantoClient {
       const attrKey = serviceAttrKeyFromAttributeName(nameStr);
       const svc = decodeDidServiceValue(entry.value, type, did);
       if (svc) {
-        // Prefer JSON name; else use slot from attr key as display tag
         const slot = serviceSlotFromAttributeName(nameStr);
         out.push({
           ...svc,
@@ -200,7 +271,7 @@ export class PerantoClient {
         });
       }
     }
-    return out;
+    return { services: out, syncedToBlock: toBlock };
   }
 
   async setDidAttribute(
@@ -619,14 +690,14 @@ export class PerantoClient {
         });
       }
       return this.walletClient!.writeContract({
-        address: factory,
-        abi: disCOFactoryAbi,
-        functionName: "createNode",
-        args: [name],
+      address: factory,
+      abi: disCOFactoryAbi,
+      functionName: "createNode",
+      args: [name],
         value: seed,
-        chain: chainFor(this.network),
-        account: this.walletClient!.account!,
-      });
+      chain: chainFor(this.network),
+      account: this.walletClient!.account!,
+    });
     };
 
     try {
@@ -637,7 +708,7 @@ export class PerantoClient {
       if (seed === 0n && floor === undefined) throw err;
       hash = await this.walletClient!.writeContract({
         address: factory,
-        abi: disCOFactoryAbi,
+          abi: disCOFactoryAbi,
         functionName: "createNode",
         args: [name],
         chain: chainFor(this.network),

@@ -62,12 +62,20 @@ export type ResolvedPublicBadge = PublicPageBadge & {
   status: "Active" | "Revoked" | "None" | "Unknown";
 };
 
-const LINK_TYPES = new Set([
+export const LINK_TYPES = new Set([
   "LinkedDomains",
   "Website",
   "CredentialInbox",
   "AuraInbox",
 ]);
+
+/** True for `Type` or `Type.slot` where Type is a known public link type. */
+export function isValidLinkOrderKey(raw: string): boolean {
+  const k = raw.trim();
+  if (!/^[A-Za-z][A-Za-z0-9_-]*(\.[A-Za-z0-9_-]+)?$/.test(k)) return false;
+  const type = k.includes(".") ? k.slice(0, k.indexOf(".")) : k;
+  return LINK_TYPES.has(type);
+}
 
 /** User-facing link kinds: pick one → type + default button label. */
 export const LINK_KINDS = [
@@ -214,14 +222,18 @@ export function schemaShort(key: string): string {
 function normalizeBadges(raw: unknown): PublicPageBadge[] | undefined {
   if (!Array.isArray(raw)) return undefined;
   const out: PublicPageBadge[] = [];
+  const seen = new Set<string>();
   for (const item of raw) {
     if (!item || typeof item !== "object") continue;
     const b = item as Record<string, unknown>;
-    const credHash = typeof b.credHash === "string" ? b.credHash : "";
-    const schemaKey = typeof b.schemaKey === "string" ? b.schemaKey : "";
-    if (!/^0x[a-fA-F0-9]{64}$/.test(credHash) || !schemaKey) continue;
+    const credHashRaw = typeof b.credHash === "string" ? b.credHash.trim() : "";
+    const schemaKey = typeof b.schemaKey === "string" ? b.schemaKey.trim() : "";
+    if (!/^0x[a-fA-F0-9]{64}$/.test(credHashRaw) || !schemaKey) continue;
+    const credHash = credHashRaw.toLowerCase() as Hex;
+    if (seen.has(credHash)) continue;
+    seen.add(credHash);
     out.push({
-      credHash: credHash as Hex,
+      credHash,
       schemaKey: schemaKey.slice(0, 120),
       label:
         typeof b.label === "string" ? b.label.slice(0, 48) : undefined,
@@ -238,7 +250,8 @@ function normalizeLinkOrder(raw: unknown): string[] | undefined {
   for (const item of raw) {
     if (typeof item !== "string") continue;
     const k = item.trim().slice(0, 48);
-    if (!k || seen.has(k.toLowerCase())) continue;
+    if (!isValidLinkOrderKey(k)) continue;
+    if (seen.has(k.toLowerCase())) continue;
     seen.add(k.toLowerCase());
     out.push(k);
     if (out.length >= 32) break;
@@ -371,9 +384,17 @@ function linkHrefKey(href: string): string {
 
 /**
  * Prefer slotted + named services; drop bare legacy duplicates of the same URL
- * (and bare Type when Type.slot already covers that URL).
+ * (and bare Type when Type.slot already covers that URL — public page only).
  */
-export function dedupePublicLinks(links: PublicPageLink[]): PublicPageLink[] {
+export type DedupePublicLinksOpts = {
+  /** Editor: keep bare Type even when Type.slot peers exist. */
+  keepBareWithSlotted?: boolean;
+};
+
+export function dedupePublicLinks(
+  links: PublicPageLink[],
+  opts?: DedupePublicLinksOpts
+): PublicPageLink[] {
   if (links.length < 2) return links;
 
   const rank = (l: PublicPageLink): number => {
@@ -392,6 +413,8 @@ export function dedupePublicLinks(links: PublicPageLink[]): PublicPageLink[] {
   }
 
   const unique = [...byHref.values()];
+  if (opts?.keepBareWithSlotted) return unique;
+
   const slottedTypes = new Set(
     unique.filter((l) => l.attrKey.includes(".")).map((l) => l.type)
   );
@@ -404,7 +427,10 @@ export function dedupePublicLinks(links: PublicPageLink[]): PublicPageLink[] {
 }
 
 /** Links shown on the public page (not the PerantoPage profile blob). */
-export function extractPublicLinks(services: DidService[] | undefined): PublicPageLink[] {
+export function extractPublicLinks(
+  services: DidService[] | undefined,
+  opts?: DedupePublicLinksOpts
+): PublicPageLink[] {
   if (!services?.length) return [];
   const out: PublicPageLink[] = [];
   for (const s of services) {
@@ -420,7 +446,7 @@ export function extractPublicLinks(services: DidService[] | undefined): PublicPa
       href,
     });
   }
-  return dedupePublicLinks(out);
+  return dedupePublicLinks(out, opts);
 }
 
 /** Stable key for ordering (`Website.blog` or draft id). */
@@ -480,17 +506,18 @@ export function buildPublicPageShareUrl(ref: string): string {
 
 export function encodePageProfile(profile: PublicPageProfile): string {
   const amt = profile.loveDefaultAmt?.trim();
+  const badges = stableBadgesForSnapshot(profile.badges);
   return JSON.stringify({
     title: profile.title?.trim() || undefined,
     bio: profile.bio?.trim() || undefined,
     accent: profile.accent?.trim() || undefined,
     theme: resolvePageThemeId(profile.theme),
     layout: resolvePageLayoutId(profile.layout),
-    badges: profile.badges?.length ? profile.badges.slice(0, 8) : undefined,
+    badges: badges?.length ? badges : undefined,
     // Always persist so owners can opt out explicitly
     showLoveInvite: profile.showLoveInvite !== false,
     loveNode: profile.loveNode && isAddress(profile.loveNode)
-      ? profile.loveNode
+      ? getAddress(profile.loveNode)
       : undefined,
     loveDefaultAmt:
       amt && /^\d+(\.\d+)?$/.test(amt) && Number(amt) > 0
@@ -508,16 +535,22 @@ export function reconcileLinkOrder(
   attrKeys: string[]
 ): string[] | undefined {
   if (!attrKeys.length) return undefined;
-  const byLower = new Map(attrKeys.map((k) => [k.toLowerCase(), k] as const));
+  const byLower = new Map(
+    attrKeys
+      .filter((k) => isValidLinkOrderKey(k.trim()))
+      .map((k) => [k.toLowerCase(), k] as const)
+  );
   const out: string[] = [];
   const seen = new Set<string>();
   for (const raw of order ?? []) {
-    const k = byLower.get(raw.trim().toLowerCase());
+    const trimmed = raw.trim();
+    if (!isValidLinkOrderKey(trimmed)) continue;
+    const k = byLower.get(trimmed.toLowerCase());
     if (!k || seen.has(k.toLowerCase())) continue;
     out.push(k);
     seen.add(k.toLowerCase());
   }
-  for (const k of attrKeys) {
+  for (const k of byLower.values()) {
     if (seen.has(k.toLowerCase())) continue;
     out.push(k);
     seen.add(k.toLowerCase());
@@ -530,11 +563,11 @@ function stableBadgesForSnapshot(
 ): PublicPageBadge[] | undefined {
   if (!badges?.length) return undefined;
   return [...badges]
-    .sort((a, b) => a.credHash.localeCompare(b.credHash))
     .map((b) => ({
-      credHash: b.credHash,
+      credHash: b.credHash.toLowerCase() as Hex,
       schemaKey: b.schemaKey.trim(),
-    }));
+    }))
+    .sort((a, b) => a.credHash.localeCompare(b.credHash));
 }
 
 function normalizeLoveDefaultAmt(

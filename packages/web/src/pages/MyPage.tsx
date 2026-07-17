@@ -20,6 +20,12 @@ import { FieldHint, HelpCallout } from "@/components/HelpCallout";
 import { Linktr33Preview } from "@/components/Linktr33Preview";
 import { PublicPresentationCard } from "@/components/PublicPresentationCard";
 import {
+  PublishCheckoutSheet,
+  buildProfileFieldDiffs,
+  toCheckoutLink,
+  type TxPlanRow,
+} from "@/components/PublishCheckoutSheet";
+import {
   Sheet,
   SheetContent,
   SheetHeader,
@@ -56,11 +62,17 @@ import {
   type PageLayoutId,
   type PageThemeId,
 } from "@/lib/page-themes";
-import type { DidService, VaultCredential } from "@peranto/sdk";
-import type { Address, Hex } from "viem";
+import {
+  didRegistryAbi,
+  encodeDidServiceValue,
+  serviceAttributeName,
+  type VaultCredential,
+} from "@peranto/sdk";
+import { encodeFunctionData, type Address, type Hex } from "viem";
 import { cn } from "@/lib/utils";
 import {
   fetchAuraVault,
+  getAddresses,
   getReadClient,
   portalClearDidService,
   portalListMembershipNodes,
@@ -68,13 +80,17 @@ import {
   portalSetDidService,
   vault,
 } from "@/lib/client";
+import { seedExpectedDidServices } from "@/lib/did-service-cache";
 import type { SessionIdentity } from "@/lib/session";
+import type { DidService } from "@peranto/sdk";
 
 type BadgeCandidate = {
   credHash: Hex;
   schemaKey: string;
   label: string;
   source: "vault" | "anchor";
+  /** Status on the current CredentialStatusRegistry (not an old deploy). */
+  status: "Active" | "Revoked" | "None" | "Unknown" | "checking";
 };
 
 type DraftLink = {
@@ -86,6 +102,8 @@ type DraftLink = {
   href: string;
   label: string;
   pending: "none" | "add" | "remove";
+  /** Bare `did/svc/Type` (sin slot) — no auto-migrar; evita pisar Type.slot existentes */
+  legacyBare?: boolean;
 };
 
 function hrefToLabel(href: string, label: string): string {
@@ -110,7 +128,7 @@ function profileSnapshot(
 
 export function MyPagePage() {
   const { session } = useOutletContext<{
-    session: SessionIdentity;
+    session: SessionIdentity | null;
     setSession: (s: SessionIdentity | null) => void;
   }>();
 
@@ -129,6 +147,11 @@ export function MyPagePage() {
   const [candidates, setCandidates] = useState<BadgeCandidate[]>([]);
   const [draftLinks, setDraftLinks] = useState<DraftLink[]>([]);
   const [publishedProfileJson, setPublishedProfileJson] = useState("");
+  const [baselineProfile, setBaselineProfile] = useState<PublicPageProfile>({});
+  const [baselineLinks, setBaselineLinks] = useState<
+    Array<{ attrKey: string; type: string; label: string; href: string }>
+  >([]);
+  const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [linkKind, setLinkKind] = useState<LinkKindId>("github");
   const [linkLabel, setLinkLabel] = useState("GitHub");
   const [linkUrl, setLinkUrl] = useState("");
@@ -143,16 +166,18 @@ export function MyPagePage() {
   const dragLinkId = useRef<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
 
-  const shareRef = session.displayName
+  const shareRef = session?.displayName
     ? `@${session.displayName}`
-    : session.did;
+    : session?.did ?? "";
   const shareUrl = useMemo(
-    () => buildPublicPageShareUrl(shareRef),
+    () => (shareRef ? buildPublicPageShareUrl(shareRef) : ""),
     [shareRef]
   );
-  const publicPath = session.displayName
+  const publicPath = session?.displayName
     ? `/u/@${session.displayName}`
-    : `/u/${encodeURIComponent(session.did)}`;
+    : session?.did
+      ? `/u/${encodeURIComponent(session.did)}`
+      : "/page";
 
   const draftLinkAttrKeys = useMemo(
     () =>
@@ -222,32 +247,213 @@ export function MyPagePage() {
 
   const linksToAdd = draftLinks.filter((l) => l.pending === "add");
   const linksToRemove = draftLinks.filter((l) => l.pending === "remove");
-  const bareToClear = linksToAdd.filter(
-    (l) => l.attrKey && !l.attrKey.includes(".")
-  );
   const linksDirty = linksToAdd.length + linksToRemove.length > 0;
   const dirty = profileDirty || linksDirty;
-  /** Only write new/removed links — cache + slotted attrs keep the rest stable. */
-  const linkWriteCount = linksDirty
-    ? linksToAdd.length + linksToRemove.length + bareToClear.length
-    : 0;
-  const txCount = (profileDirty ? 1 : 0) + linkWriteCount;
+  /** Solo lo que el usuario cambió — no reescribir links bare existentes. */
+  const txCount =
+    (profileDirty ? 1 : 0) + linksToAdd.length + linksToRemove.length;
+
+  const profileDiffs = useMemo(
+    () =>
+      profileDirty ? buildProfileFieldDiffs(baselineProfile, draftProfile) : [],
+    [profileDirty, baselineProfile, draftProfile]
+  );
+
+  const afterCheckoutLinks = useMemo(
+    () =>
+      draftLinks
+        .filter((l) => l.pending !== "remove")
+        .map((l) => toCheckoutLink(l)),
+    [draftLinks]
+  );
+
+  const bareLegacyWarning = useMemo(() => {
+    const bares = draftLinks.filter(
+      (l) =>
+        l.pending !== "remove" &&
+        Boolean(l.legacyBare || (l.attrKey && !l.attrKey.includes(".")))
+    );
+    if (!bares.length) return null;
+    return bares.map((b) => `“${b.label}”`).join(", ");
+  }, [draftLinks]);
+
+  const txPlan = useMemo((): TxPlanRow[] => {
+    const rows: TxPlanRow[] = [];
+    if (profileDirty) {
+      rows.push({
+        id: "profile",
+        kind: "profile",
+        title: "Personalización",
+        detail:
+          profileDiffs.map((d) => d.label).join(", ") || "Actualizar página",
+      });
+    }
+    for (const l of linksToAdd) {
+      const slot = l.slot.trim() || deriveServiceSlot(l.type, l.href, l.label);
+      const attrKey = `${l.type}.${slot}`;
+      rows.push({
+        id: `add-${l.id}`,
+        kind: "add",
+        title: `Añadir “${l.label}”`,
+        detail: `${attrKey} · ${l.href}`,
+      });
+    }
+    for (const l of linksToRemove) {
+      rows.push({
+        id: `rm-${l.attrKey ?? l.id}`,
+        kind: "remove",
+        title: `Quitar “${l.label}”`,
+        detail: `${l.attrKey ?? l.type} · ${l.href}`,
+      });
+    }
+    return rows;
+  }, [profileDirty, profileDiffs, linksToAdd, linksToRemove]);
+
+  const estimateCheckout = useCallback(async () => {
+    if (!session) return null;
+    const client = await getReadClient();
+    const addresses = await getAddresses();
+    const nextNonce = Number(
+      await client.publicClient.getTransactionCount({
+        address: session.address,
+        blockTag: "pending",
+      })
+    );
+    let gasPriceWei: bigint | undefined;
+    try {
+      const fees = await client.publicClient.estimateFeesPerGas();
+      gasPriceWei = fees.maxFeePerGas ?? fees.gasPrice ?? undefined;
+    } catch {
+      /* optional */
+    }
+
+    const FALLBACK = 150_000n;
+    const validity = 60n * 60n * 24n * 365n * 100n;
+
+    async function estimateSet(name: Hex, value: Hex, validitySec: bigint) {
+      try {
+        const data = encodeFunctionData({
+          abi: didRegistryAbi,
+          functionName: "setAttribute",
+          args: [session!.address, name, value, validitySec],
+        });
+        return (await client.publicClient.estimateGas({
+          account: session!.address,
+          to: addresses.DIDRegistry,
+          data,
+        })) as bigint;
+      } catch {
+        return FALLBACK;
+      }
+    }
+
+    const rows: TxPlanRow[] = [];
+    let i = 0;
+
+    if (profileDirty) {
+      const value = encodeDidServiceValue({
+        type: PAGE_PROFILE_TYPE,
+        serviceEndpoint: encodePageProfile(draftProfile),
+      });
+      const gas = await estimateSet(
+        serviceAttributeName(PAGE_PROFILE_TYPE),
+        value,
+        validity
+      );
+      rows.push({
+        id: "profile",
+        kind: "profile",
+        title: "Personalización",
+        detail:
+          profileDiffs.map((d) => d.label).join(", ") || "Actualizar página",
+        gas,
+        nonce: nextNonce + i,
+      });
+      i += 1;
+    }
+
+    for (const l of linksToAdd) {
+      const slot = l.slot.trim() || deriveServiceSlot(l.type, l.href, l.label);
+      if (!slot) continue;
+      const key = `${l.type}.${slot}`;
+      const value = encodeDidServiceValue({
+        id: `${session.did}#service-${key}`,
+        type: l.type,
+        serviceEndpoint: l.href,
+        name: l.label || slot,
+      });
+      const gas = await estimateSet(
+        serviceAttributeName(l.type, slot),
+        value,
+        validity
+      );
+      rows.push({
+        id: `add-${l.id}`,
+        kind: "add",
+        title: `Añadir “${l.label}”`,
+        detail: `${key} · ${l.href}`,
+        gas,
+        nonce: nextNonce + i,
+      });
+      i += 1;
+    }
+
+    for (const l of linksToRemove) {
+      if (!l.attrKey) continue;
+      const gas = await estimateSet(
+        l.attrKey.includes(".")
+          ? serviceAttributeName(
+              l.attrKey.slice(0, l.attrKey.indexOf(".")),
+              l.attrKey.slice(l.attrKey.indexOf(".") + 1)
+            )
+          : serviceAttributeName(l.attrKey),
+        "0x" as Hex,
+        0n
+      );
+      rows.push({
+        id: `rm-${l.attrKey}`,
+        kind: "remove",
+        title: `Quitar “${l.label}”`,
+        detail: `${l.attrKey} · ${l.href}`,
+        gas,
+        nonce: nextNonce + i,
+      });
+      i += 1;
+    }
+
+    return { nextNonce, gasPriceWei, rows };
+  }, [
+    session,
+    profileDirty,
+    profileDiffs,
+    linksToAdd,
+    linksToRemove,
+    draftProfile,
+  ]);
 
   const featuredHashes = useMemo(
     () => new Set(badges.map((b) => b.credHash.toLowerCase())),
     [badges]
   );
 
-  const titleFallback = session.displayName
+  const titleFallback = session?.displayName
     ? `@${session.displayName}`
     : "Tu página";
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (opts?: { forceCold?: boolean }) => {
+    if (!session) return;
     const client = await getReadClient();
-    const doc = await portalResolveDid(session.did);
+
+    // Profile + membership in parallel — don't wait on badge anchors.
+    const [doc, membership] = await Promise.all([
+      portalResolveDid(session.did, {
+        forceCold: opts?.forceCold,
+      }),
+      portalListMembershipNodes(session.address),
+    ]);
+
     const list = doc.service ?? [];
     const p = parsePageProfile(list);
-    const membership = await portalListMembershipNodes(session.address);
     setMemberNodes(
       membership.map((n) => ({ address: n.address, name: n.name }))
     );
@@ -275,7 +481,7 @@ export function MyPagePage() {
     const resolvedAmt = p.loveDefaultAmt ?? DEFAULT_TIP_AMT;
 
     const publishedLinks = sortPublicLinks(
-      extractPublicLinks(list),
+      extractPublicLinks(list, { keepBareWithSlotted: true }),
       p.linkOrder
     );
     const linkAttrKeys = publishedLinks.map((l) => l.attrKey);
@@ -287,23 +493,28 @@ export function MyPagePage() {
     setShowLoveInvite(showInvite);
     setLoveDefaultAmt(resolvedAmt);
     setBadges(p.badges ?? []);
-    setPublishedProfileJson(
-      profileSnapshot(
-        {
-          title: p.title,
-          bio: p.bio,
-          accent: resolvedAccent,
-          theme: resolvedTheme,
-          layout: resolvedLayout,
-          badges: p.badges,
-          showLoveInvite: showInvite,
-          loveNode: showInvite && resolvedLove ? resolvedLove : undefined,
-          loveDefaultAmt: p.loveDefaultAmt,
-          linkOrder: reconcileLinkOrder(p.linkOrder, linkAttrKeys),
-        },
-        linkAttrKeys
-      )
+    const baseline: PublicPageProfile = {
+      title: p.title,
+      bio: p.bio,
+      accent: resolvedAccent,
+      theme: resolvedTheme,
+      layout: resolvedLayout,
+      badges: p.badges,
+      showLoveInvite: showInvite,
+      loveNode: showInvite && resolvedLove ? resolvedLove : undefined,
+      loveDefaultAmt: p.loveDefaultAmt,
+      linkOrder: reconcileLinkOrder(p.linkOrder, linkAttrKeys),
+    };
+    setBaselineProfile(baseline);
+    setBaselineLinks(
+      publishedLinks.map((l) => ({
+        attrKey: l.attrKey,
+        type: l.type,
+        label: l.label,
+        href: l.href,
+      }))
     );
+    setPublishedProfileJson(profileSnapshot(baseline, linkAttrKeys));
 
     const discardLocalPending = clearPendingOnRefresh.current;
     clearPendingOnRefresh.current = false;
@@ -333,7 +544,6 @@ export function MyPagePage() {
             ? l.label
             : suggestLinkLabel(l.href);
         const markedRemove = removeKeys.has(l.attrKey.toLowerCase());
-        const needsRewrite = !hasSlot;
         return {
           id: l.attrKey,
           attrKey: l.attrKey,
@@ -341,11 +551,10 @@ export function MyPagePage() {
           slot,
           href: l.href,
           label: display,
-          pending: markedRemove
-            ? ("remove" as const)
-            : needsRewrite
-              ? ("add" as const)
-              : ("none" as const),
+          legacyBare: !hasSlot,
+          // Never auto-queue bare→slot rewrite: that cleared bare and often
+          // overwrote an existing Type.slot with the same derived slot.
+          pending: markedRemove ? ("remove" as const) : ("none" as const),
         };
       });
       const keptAdds = pendingAdds.filter((a) => {
@@ -367,66 +576,120 @@ export function MyPagePage() {
       return [...fromChain, ...extra];
     });
 
-    const local = await vault.list();
-    let aura: VaultCredential[] = [];
-    try {
-      aura = await fetchAuraVault();
-    } catch {
-      aura = [];
-    }
-    const vaultCreds = [...local, ...aura];
-    const anchors = await client.queryCredentialAnchors({
-      subject: session.address,
-    });
-    const map = new Map<string, BadgeCandidate>();
-    for (const c of vaultCreds) {
-      if (!c.credHash) continue;
-      const subjectOk =
-        !c.subjectDid ||
-        c.subjectDid.toLowerCase() === session.did.toLowerCase();
-      if (!subjectOk) continue;
-      map.set(c.credHash.toLowerCase(), {
-        credHash: c.credHash,
-        schemaKey: c.schemaKey,
-        label: c.label ?? schemaShort(c.schemaKey),
-        source: "vault",
-      });
-    }
-    for (const a of anchors) {
-      const key = a.credHash.toLowerCase();
-      if (map.has(key)) continue;
-      map.set(key, {
-        credHash: a.credHash,
-        schemaKey: `schema:${a.schemaId.slice(0, 10)}…`,
-        label: `Ancla ${a.credHash.slice(0, 10)}…`,
-        source: "anchor",
-      });
-    }
-    setCandidates([...map.values()]);
-  }, [session.address, session.did]);
+    // Badges: vault first (fast), then verify each hash on current registry.
+    void (async () => {
+      const local = await vault.list();
+      let aura: VaultCredential[] = [];
+      try {
+        aura = await fetchAuraVault();
+      } catch {
+        aura = [];
+      }
+      const vaultCreds = [...local, ...aura];
+      const map = new Map<string, BadgeCandidate>();
+      for (const c of vaultCreds) {
+        if (!c.credHash) continue;
+        const subjectOk =
+          !c.subjectDid ||
+          c.subjectDid.toLowerCase() === session.did.toLowerCase();
+        if (!subjectOk) continue;
+        const hash = c.credHash.toLowerCase() as Hex;
+        map.set(hash, {
+          credHash: hash,
+          schemaKey: c.schemaKey,
+          label: c.label ?? schemaShort(c.schemaKey),
+          source: "vault",
+          status: "checking",
+        });
+      }
+      setCandidates([...map.values()]);
+
+      try {
+        const anchors = await client.queryCredentialAnchors({
+          subject: session.address,
+        });
+        for (const a of anchors) {
+          const key = a.credHash.toLowerCase() as Hex;
+          if (map.has(key)) continue;
+          map.set(key, {
+            credHash: key,
+            schemaKey: `schema:${a.schemaId.slice(0, 10)}…`,
+            label: `Ancla ${a.credHash.slice(0, 10)}…`,
+            source: "anchor",
+            status: "checking",
+          });
+        }
+      } catch {
+        /* anchors optional */
+      }
+
+      // Resolve live status — badges only show publicly if Active (or Revoked).
+      await Promise.all(
+        [...map.values()].map(async (c) => {
+          try {
+            const st = await client.getCredentialStatus(c.credHash);
+            const subjectOk =
+              st.subject &&
+              st.subject.toLowerCase() === session.address.toLowerCase();
+            const label =
+              st.st === 1
+                ? "Active"
+                : st.st === 2
+                  ? "Revoked"
+                  : st.st === 0
+                    ? "None"
+                    : "Unknown";
+            map.set(c.credHash, {
+              ...c,
+              status: subjectOk ? label : "None",
+            });
+          } catch {
+            map.set(c.credHash, { ...c, status: "Unknown" });
+          }
+        })
+      );
+      setCandidates([...map.values()]);
+    })();
+  }, [session?.address, session?.did, session]);
 
   useEffect(() => {
+    if (!session) return;
     void refresh().catch((e) =>
       setErr(e instanceof Error ? e.message : String(e))
     );
-  }, [refresh]);
+  }, [refresh, session]);
 
   function toggleBadge(c: BadgeCandidate) {
-    const key = c.credHash.toLowerCase();
+    const key = c.credHash.toLowerCase() as Hex;
     const exists = badges.some((b) => b.credHash.toLowerCase() === key);
     if (exists) {
       setBadges(badges.filter((b) => b.credHash.toLowerCase() !== key));
+      setErr("");
       return;
     }
     if (badges.length >= 8) {
       setErr("Máximo 8 badges en la página pública");
       return;
     }
+    if (c.status === "None" || c.status === "Unknown") {
+      setErr(
+        "Esa credencial no tiene ancla Active en el CredentialStatusRegistry actual (¿emitida en un deploy viejo?). En la página pública no se mostrará hasta re-anclarla aquí."
+      );
+      return;
+    }
+    if (c.status === "Revoked") {
+      setErr("Esa ancla está Revoked — no sirve como badge de confianza.");
+      return;
+    }
+    if (c.status === "checking") {
+      setErr("Aún comprobando el ancla on-chain…");
+      return;
+    }
     setErr("");
     setBadges([
       ...badges,
       {
-        credHash: c.credHash,
+        credHash: key,
         schemaKey: c.schemaKey,
         label: c.label,
       },
@@ -451,33 +714,29 @@ export function MyPagePage() {
     const type = kind.type;
     const display = hrefToLabel(href, linkLabel || suggestLinkLabel(href));
     if (!display.trim()) {
-      setErr("Elige o escribe el texto del botón (ej. Telegram, Blog, Mail)");
+      setErr("Escribe el texto del botón (ej. Blog, Criteria, Mail)");
       return;
     }
-    // Slot from the button label so several Website (or LinkedDomains) links
-    // can coexist — e.g. "Blog" + "Lab", not both locked to kind.slot "website".
     const slot = deriveServiceSlot(type, href, display);
 
-    const clash = draftLinks.find(
-      (l) =>
-        l.pending !== "remove" &&
-        l.type === type &&
-        l.slot.toLowerCase() === slot.toLowerCase()
-    );
+    const clash = draftLinks.find((l) => {
+      if (l.pending === "remove") return false;
+      const s = l.attrKey?.includes(".")
+        ? l.attrKey.slice(l.attrKey.indexOf(".") + 1)
+        : l.slot.trim() || deriveServiceSlot(l.type, l.href, l.label);
+      return l.type === type && s.toLowerCase() === slot.toLowerCase();
+    });
     if (clash) {
       setErr(
-        clash.label.toLowerCase() === display.toLowerCase()
-          ? `Ya tienes un botón “${clash.label}”. Usa otra etiqueta o quita el anterior.`
-          : `La etiqueta “${display}” choca con “${clash.label}” (mismo id interno). Usa otra, p. ej. Blog o Lab.`
+        `Ya tienes un botón “${clash.label}”. Usa otro nombre (Blog, Lab, Docs…).`
       );
       return;
     }
 
-    const id = `draft-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     setDraftLinks((prev) => [
       ...prev,
       {
-        id,
+        id: `draft-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         type,
         slot,
         href,
@@ -487,7 +746,7 @@ export function MyPagePage() {
     ]);
     setLinkUrl("");
     if (kind.id === "custom") setLinkLabel("");
-    setMsg(`Listo: en la página se verá el botón “${display}”`);
+    setMsg(`Añadido: “${display}”`);
     setErr("");
   }
 
@@ -527,6 +786,7 @@ export function MyPagePage() {
   }
 
   async function publishAll() {
+    if (!session) return;
     if (!dirty || txCount === 0) {
       setMsg("No hay cambios pendientes");
       return;
@@ -535,27 +795,58 @@ export function MyPagePage() {
     setErr("");
     setMsg("");
     let step = 0;
+    const writtenAttrKeys: string[] = [];
+    const expectedServices: DidService[] = [];
     try {
+      const profilePayload = encodePageProfile({
+        ...draftProfile,
+        linkOrder: reconcileLinkOrder(
+          draftProfile.linkOrder,
+          draftLinkAttrKeys
+        ),
+      });
+
       if (profileDirty) {
         step += 1;
         setProgress(`Tx ${step}/${txCount}: personalización (PerantoPage)`);
-        await portalSetDidService(
-          PAGE_PROFILE_TYPE,
-          encodePageProfile({
-            ...draftProfile,
-            linkOrder: reconcileLinkOrder(
-              draftProfile.linkOrder,
-              draftLinkAttrKeys
-            ),
-          }),
-          session
-        );
+        await portalSetDidService(PAGE_PROFILE_TYPE, profilePayload, session);
+        writtenAttrKeys.push(PAGE_PROFILE_TYPE);
+        expectedServices.push({
+          id: `${session.did}#service-${PAGE_PROFILE_TYPE}`,
+          type: PAGE_PROFILE_TYPE,
+          serviceEndpoint: profilePayload,
+          attrKey: PAGE_PROFILE_TYPE,
+        });
       }
+
       if (linksDirty) {
+        const takenSlots = new Set(
+          draftLinks
+            .filter((l) => l.pending === "none" && l.attrKey?.includes("."))
+            .map((l) => `${l.type}.${l.slot}`.toLowerCase())
+        );
         for (const l of linksToAdd) {
+          let slot = l.slot.trim() || deriveServiceSlot(l.type, l.href, l.label);
+          if (!slot) {
+            throw new Error(
+              `No se pudo derivar id on-chain para “${l.label}”. Cambia el texto del botón.`
+            );
+          }
+          let guard = 0;
+          while (
+            takenSlots.has(`${l.type}.${slot}`.toLowerCase()) &&
+            guard < 8
+          ) {
+            slot = `${slot}${guard + 2}`.slice(0, 24);
+            guard += 1;
+          }
+          if (!slot.trim()) {
+            throw new Error(`Slot vacío al publicar “${l.label}”`);
+          }
+          const attrKey = `${l.type}.${slot}`;
+          takenSlots.add(attrKey.toLowerCase());
           step += 1;
-          setProgress(`Tx ${step}/${txCount}: link ${l.label}`);
-          const slot = l.slot.trim() || deriveServiceSlot(l.type, l.href, l.label);
+          setProgress(`Tx ${step}/${txCount}: ${l.label} (${attrKey})`);
           await portalSetDidService(
             l.type,
             l.href,
@@ -563,32 +854,78 @@ export function MyPagePage() {
             slot,
             l.label || slot
           );
-          // Legacy bare attr (LinkedDomains without .slot) → clear after slotted write
-          if (l.attrKey && !l.attrKey.includes(".")) {
-            step += 1;
-            setProgress(`Tx ${step}/${txCount}: limpiar legado ${l.attrKey}`);
-            await portalClearDidService(l.attrKey, session);
-          }
+          writtenAttrKeys.push(attrKey);
+          expectedServices.push({
+            id: `${session.did}#service-${attrKey}`,
+            type: l.type,
+            serviceEndpoint: l.href,
+            attrKey,
+            name: l.label || slot,
+          });
         }
         for (const l of linksToRemove) {
           if (!l.attrKey) continue;
           step += 1;
-          setProgress(`Tx ${step}/${txCount}: quitar ${l.label}`);
+          setProgress(`Tx ${step}/${txCount}: quitar ${l.label} (${l.attrKey})`);
           await portalClearDidService(l.attrKey, session);
         }
       }
+
+      // Keep surviving links in expected seed (incl. bare legacy).
+      for (const l of draftLinks) {
+        if (l.pending === "remove" || l.pending === "add") continue;
+        if (!l.attrKey) continue;
+        expectedServices.push({
+          id: `${session.did}#service-${l.attrKey}`,
+          type: l.type,
+          serviceEndpoint: l.href,
+          attrKey: l.attrKey,
+          name: l.label,
+        });
+      }
+
+      const addresses = await getAddresses();
+      seedExpectedDidServices(
+        addresses.DIDRegistry,
+        session.did,
+        expectedServices
+      );
+
       setProgress("");
       setMsg(
         `Publicado: ${txCount} transacción${txCount === 1 ? "" : "es"} on-chain`
       );
       clearPendingOnRefresh.current = true;
       await refresh();
+
+      // Verify expected attrKeys survived warm sync.
+      const doc = await portalResolveDid(session.did);
+      const got = new Set(
+        (doc.service ?? [])
+          .map((s) => s.attrKey?.toLowerCase())
+          .filter(Boolean) as string[]
+      );
+      const missing = writtenAttrKeys.filter((k) => !got.has(k.toLowerCase()));
+      if (missing.length) {
+        setErr(
+          `Sync incompleto tras publicar — no aparecen: ${missing.join(", ")}. Reintenta “Revisar y publicar” o recarga; si persiste, el RPC puede estar truncando logs.`
+        );
+      }
+      setCheckoutOpen(false);
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(false);
       setProgress("");
     }
+  }
+
+  if (!session) {
+    return (
+      <div className="mx-auto max-w-6xl px-4 py-8">
+        <p className="text-sm text-muted-foreground">Cargando sesión…</p>
+      </div>
+    );
   }
 
   const previewBlock = (
@@ -611,7 +948,7 @@ export function MyPagePage() {
           </h1>
           <p className="mt-1 max-w-xl text-sm text-muted-foreground">
             Edita en borrador y publica todo junto. Nada se escribe on-chain
-            hasta que pulses <strong>Publicar todo</strong>.
+            hasta que pulses <strong>Revisar y publicar</strong>.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -882,7 +1219,9 @@ export function MyPagePage() {
           <Card>
             <CardTitle>Badges</CardTitle>
             <CardDesc>
-              Solo hashes; el estado Active se verifica en la página live.
+              Solo hashes en PerantoPage; la página pública exige ancla{" "}
+              <strong>Active</strong> en el registry actual. Credenciales de un
+              deploy anterior aparecen aquí pero no valen hasta re-emitir/anclar.
             </CardDesc>
             {candidates.length === 0 ? (
               <p className="mt-3 text-sm text-muted-foreground">
@@ -892,6 +1231,7 @@ export function MyPagePage() {
               <ul className="mt-3 space-y-2">
                 {candidates.map((c) => {
                   const on = featuredHashes.has(c.credHash.toLowerCase());
+                  const canFeature = c.status === "Active";
                   return (
                     <li
                       key={c.credHash}
@@ -899,12 +1239,32 @@ export function MyPagePage() {
                         "flex items-center justify-between gap-2 rounded-xl border px-3 py-2",
                         on
                           ? "border-[var(--color-moss)]/30 bg-[var(--color-moss)]/5"
-                          : "border-[var(--color-moss)]/12"
+                          : "border-[var(--color-moss)]/12",
+                        !canFeature && !on && "opacity-70"
                       )}
                     >
                       <div className="min-w-0">
                         <p className="truncate text-sm font-semibold">
                           {c.label}
+                          <span
+                            className={cn(
+                              "ml-2 text-[10px] font-normal",
+                              c.status === "Active" &&
+                                "text-[var(--color-moss)]",
+                              c.status === "Revoked" &&
+                                "text-[var(--color-danger)]",
+                              (c.status === "None" ||
+                                c.status === "Unknown" ||
+                                c.status === "checking") &&
+                                "text-muted-foreground"
+                            )}
+                          >
+                            {c.status === "checking"
+                              ? "comprobando…"
+                              : c.status === "None"
+                                ? "sin ancla aquí"
+                                : c.status}
+                          </span>
                         </p>
                         <p className="truncate font-mono text-[10px] text-muted-foreground">
                           {c.schemaKey} · {c.source}
@@ -913,11 +1273,11 @@ export function MyPagePage() {
                       <Button
                         size="sm"
                         variant={on ? "default" : "secondary"}
-                        disabled={busy}
+                        disabled={busy || (!on && !canFeature)}
                         onClick={() => toggleBadge(c)}
                       >
                         <BadgeCheck className="size-3.5" />
-                        {on ? "En página" : "Mostrar"}
+                        {on ? "En página" : canFeature ? "Mostrar" : "No válida"}
                       </Button>
                     </li>
                   );
@@ -929,31 +1289,40 @@ export function MyPagePage() {
                 {badges.length}/8 en el borrador
               </p>
             )}
+            {badges.some((b) => {
+              const c = candidates.find(
+                (x) => x.credHash.toLowerCase() === b.credHash.toLowerCase()
+              );
+              return c && (c.status === "None" || c.status === "Unknown");
+            }) && (
+              <p className="mt-2 rounded-xl border border-[var(--color-danger)]/25 bg-[var(--color-danger)]/5 px-3 py-2 text-xs text-[var(--color-moss-deep)]">
+                Hay badges guardados en PerantoPage sin ancla Active en este
+                registry. Quítalos o vuelve a emitir/anclar la VC en Credenciales
+                con el deploy actual.
+              </p>
+            )}
           </Card>
 
           <Card>
             <CardTitle>Links</CardTitle>
             <CardDesc>
-              Elige el tipo, pega la URL y revisa el texto del botón. Eso es lo
-              que verá la gente en tu página pública. Varios websites: cambia la
-              etiqueta (Blog, Lab, D…) — no dejes todas en “Website”. Arrastra
-              el asa para ordenar; el orden se guarda en PerantoPage al publicar.
+              Tipo, URL y el <strong>texto del botón</strong> (Blog, Mail…).
+              Puedes tener varios del mismo tipo si el nombre es distinto.
             </CardDesc>
 
-            {draftLinks.filter((l) => l.pending !== "remove").length === 0 && (
-              <p className="mt-3 rounded-xl border border-[var(--color-moss)]/25 bg-[var(--color-moss)]/8 px-3 py-2 text-xs text-[var(--color-moss-deep)]">
-                No hay links en tu DID on-chain (solo PerantoPage). Añade los
-                canales abajo y pulsa <strong>Publicar todo</strong>.
+            {bareLegacyWarning && (
+              <p className="mt-3 rounded-xl border border-[#c4a35a]/35 bg-[#c4a35a]/10 px-3 py-2 text-xs text-[var(--color-moss-deep)]">
+                Link(s) antiguo(s) sin id on-chain: {bareLegacyWarning}. No se
+                reescriben solos; bórralos y vuelve a añadirlos con nombre si
+                quieres varios del mismo tipo. Añadir uno nuevo{" "}
+                <em>no</em> los borra.
               </p>
             )}
 
-            {draftLinks.some(
-              (l) => l.pending === "add" && l.attrKey && !l.attrKey.includes(".")
-            ) && (
-              <p className="mt-3 rounded-xl border border-[#c4a35a]/40 bg-[#c4a35a]/10 px-3 py-2 text-xs text-[var(--color-moss-deep)]">
-                Detectamos links antiguos sin etiqueta. Al{" "}
-                <strong>Publicar todo</strong> se corrigen solos (Telegram,
-                Website, Mail…) y dejan de pisarse entre sí.
+            {draftLinks.filter((l) => l.pending !== "remove").length === 0 && (
+              <p className="mt-3 rounded-xl border border-[var(--color-moss)]/25 bg-[var(--color-moss)]/8 px-3 py-2 text-xs text-[var(--color-moss-deep)]">
+                Aún no hay links. Añade canales abajo y pulsa{" "}
+                <strong>Revisar y publicar</strong>.
               </p>
             )}
 
@@ -1088,9 +1457,14 @@ export function MyPagePage() {
                       {l.label}
                       {l.pending === "add" && (
                         <span className="ml-2 text-[10px] font-normal text-[var(--color-moss)]">
-                          {l.attrKey && !l.attrKey.includes(".")
-                            ? "se corregirá al publicar"
-                            : "nuevo"}
+                          nuevo
+                        </span>
+                      )}
+                      {l.pending === "none" &&
+                        (l.legacyBare ||
+                          (l.attrKey && !l.attrKey.includes("."))) && (
+                        <span className="ml-2 text-[10px] font-normal text-[#8a7040]">
+                          sin id
                         </span>
                       )}
                       {l.pending === "remove" && (
@@ -1157,11 +1531,10 @@ export function MyPagePage() {
               </span>
             ) : dirty ? (
               <>
-                Borrador con cambios ·{" "}
+                Borrador ·{" "}
                 <strong className="text-[var(--color-moss-deep)]">
                   {txCount} tx
-                </strong>{" "}
-                al publicar
+                </strong>
                 {profileDirty && (
                   <span className="text-xs"> · perfil/tema/badges</span>
                 )}
@@ -1178,17 +1551,34 @@ export function MyPagePage() {
           </p>
           <Button
             disabled={busy || !dirty}
-            onClick={() => void publishAll()}
+            onClick={() => setCheckoutOpen(true)}
           >
-            {busy ? (
-              <Loader2 className="size-3.5 animate-spin" />
-            ) : null}
-            Publicar todo
+            Revisar y publicar
             {dirty && !busy ? ` (${txCount})` : ""}
           </Button>
         </div>
       </div>
       <div className="h-20" aria-hidden />
+
+      <PublishCheckoutSheet
+        open={checkoutOpen}
+        onOpenChange={setCheckoutOpen}
+        txCount={txCount}
+        did={session.did}
+        address={session.address}
+        baselineProfile={baselineProfile}
+        draftProfile={draftProfile}
+        profileDiffs={profileDiffs}
+        beforeLinks={baselineLinks.map((l) => toCheckoutLink(l))}
+        afterLinks={afterCheckoutLinks}
+        linksToAdd={linksToAdd.map((l) => toCheckoutLink(l))}
+        linksToRemove={linksToRemove.map((l) => toCheckoutLink(l))}
+        txPlan={txPlan}
+        busy={busy}
+        progress={progress}
+        onConfirm={() => void publishAll()}
+        onEstimate={estimateCheckout}
+      />
     </div>
   );
 }

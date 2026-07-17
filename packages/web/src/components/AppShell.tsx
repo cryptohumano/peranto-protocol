@@ -52,7 +52,9 @@ type Holdings = {
 export function AppShell() {
   const nav = useNavigate();
   const location = useLocation();
-  const [session, setSession] = useState<SessionIdentity | null>(null);
+  const [session, setSession] = useState<SessionIdentity | null>(() =>
+    loadSession()
+  );
   const [holdings, setHoldings] = useState<Holdings | null>(null);
   const [activeDisco, setActiveDisco] = useState(loadActiveDisco);
 

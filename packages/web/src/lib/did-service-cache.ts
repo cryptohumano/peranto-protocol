@@ -8,10 +8,21 @@ type CachedSvc = {
   name?: string;
 };
 
+type SyncState = {
+  syncedToBlock: string;
+  /** All DID services with attrKey (incl. PerantoPage), not only public links. */
+  services: CachedSvc[];
+};
+
 const PAGE_TYPES = new Set(["PerantoPage"]);
 
 function cacheKey(registry: string, did: string): string {
-  return `peranto:did-svc-v2:${registry.toLowerCase()}:${did.toLowerCase()}`;
+  // v3 — invalidate caches that restored deleted links (merge v4 ghosts)
+  return `peranto:did-svc-v3:${registry.toLowerCase()}:${did.toLowerCase()}`;
+}
+
+function syncKey(registry: string, did: string): string {
+  return `peranto:did-svc-sync-v2:${registry.toLowerCase()}:${did.toLowerCase()}`;
 }
 
 function recentKey(did: string): string {
@@ -27,6 +38,67 @@ function readCache(registry: string, did: string): CachedSvc[] {
     return Array.isArray(parsed) ? parsed : [];
   } catch {
     return [];
+  }
+}
+
+export function readDidSyncState(
+  registry: string,
+  did: string
+): SyncState | null {
+  if (typeof localStorage === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(syncKey(registry, did));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as SyncState;
+    if (!parsed?.syncedToBlock || !Array.isArray(parsed.services)) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+export function writeDidSyncState(
+  registry: string,
+  did: string,
+  syncedToBlock: bigint,
+  services: DidService[]
+) {
+  if (typeof localStorage === "undefined") return;
+  const payload: SyncState = {
+    syncedToBlock: syncedToBlock.toString(),
+    services: services
+      .filter((s) => s.attrKey)
+      .map((s) => ({
+        attrKey: s.attrKey!,
+        type: s.type,
+        serviceEndpoint: s.serviceEndpoint,
+        id: s.id,
+        name: typeof s.name === "string" ? s.name : undefined,
+      })),
+  };
+  try {
+    localStorage.setItem(syncKey(registry, did), JSON.stringify(payload));
+  } catch {
+    /* quota */
+  }
+  writeCache(registry, did, services);
+}
+
+/** Drop sync cursor + link cache so the next resolve does a cold lookback. */
+export function clearDidSyncState(registry: string, did: string) {
+  if (typeof localStorage === "undefined") return;
+  try {
+    localStorage.removeItem(syncKey(registry, did));
+    localStorage.removeItem(cacheKey(registry, did));
+  } catch {
+    /* ignore */
+  }
+  if (typeof sessionStorage !== "undefined") {
+    try {
+      sessionStorage.removeItem(recentKey(did));
+    } catch {
+      /* ignore */
+    }
   }
 }
 
@@ -112,12 +184,22 @@ function hrefKey(endpoint: DidService["serviceEndpoint"]): string | null {
   return null;
 }
 
-function isSlotted(attrKey: string): boolean {
-  return attrKey.includes(".");
+function cachedToService(did: string, c: CachedSvc): DidService {
+  return {
+    id: c.id ?? `${did}#service-${c.attrKey}`,
+    type: c.type,
+    serviceEndpoint: c.serviceEndpoint,
+    attrKey: c.attrKey,
+    name: c.name,
+  };
 }
 
-/** Drop cached link rows — chain is authoritative (fixes ghost links in /page). */
-export function resetDidServiceCache(registry: string, did: string, doc: DidDocument) {
+/** Drop cached link rows — chain is authoritative. */
+export function resetDidServiceCache(
+  registry: string,
+  did: string,
+  doc: DidDocument
+) {
   writeCache(registry, did, doc.service ?? []);
   const chainKeys = (doc.service ?? [])
     .filter(isLinkService)
@@ -129,12 +211,12 @@ export function resetDidServiceCache(registry: string, did: string, doc: DidDocu
 }
 
 /**
- * Merge chain-resolved services with local cache so RPC lookback gaps don’t drop links.
+ * Merge chain-resolved services with **this-session** writes only.
  *
- * Rules (v3):
- * - Chain always wins for the same attrKey
- * - If chain has **no** link services, never restore from cache (no ghosts)
- * - Otherwise restore only slotted keys published this session (`recent`) missing from chain
+ * v5 — do NOT restore the full localStorage link cache:
+ * that resurrected deleted links when chain was empty/partial (lookback or
+ * intentional clear). Only re-attach slotted keys marked `recent` that the
+ * RPC may have missed right after a publish in this tab.
  */
 export function mergeDidDocumentServices(
   registry: string,
@@ -142,14 +224,26 @@ export function mergeDidDocumentServices(
 ): DidDocument {
   const fromChain = doc.service ?? [];
   const chainLinks = fromChain.filter(isLinkService);
-
-  if (chainLinks.length === 0) {
-    resetDidServiceCache(registry, doc.id, doc);
-    return doc;
-  }
-
   const cached = readCache(registry, doc.id);
   const recent = readRecentAttrKeys(doc.id);
+
+  if (chainLinks.length === 0) {
+    // Empty chain = authoritative (cleared or never published). Never revive
+    // the full cache — only this-session / expected writes still in `recent`.
+    const recentOnly = cached.filter((c) =>
+      recent.has(c.attrKey.toLowerCase())
+    );
+    if (recentOnly.length === 0) {
+      resetDidServiceCache(registry, doc.id, doc);
+      return doc;
+    }
+    const nonLinks = fromChain.filter((s) => !isLinkService(s));
+    const restored = recentOnly.map((c) => cachedToService(doc.id, c));
+    const merged = [...nonLinks, ...restored];
+    writeCache(registry, doc.id, merged);
+    return { ...doc, service: merged };
+  }
+
   const byKey = new Map<string, DidService>();
   const hrefs = new Set<string>();
 
@@ -162,17 +256,10 @@ export function mergeDidDocumentServices(
 
   for (const c of cached) {
     if (!c.attrKey || byKey.has(c.attrKey)) continue;
-    if (!isSlotted(c.attrKey)) continue;
     if (!recent.has(c.attrKey.toLowerCase())) continue;
     const h = hrefKey(c.serviceEndpoint);
     if (h && hrefs.has(h)) continue;
-    byKey.set(c.attrKey, {
-      id: c.id ?? `${doc.id}#service-${c.attrKey}`,
-      type: c.type,
-      serviceEndpoint: c.serviceEndpoint,
-      attrKey: c.attrKey,
-      name: c.name,
-    });
+    byKey.set(c.attrKey, cachedToService(doc.id, c));
     if (h) hrefs.add(h);
   }
 
@@ -190,16 +277,21 @@ export function rememberDidService(
   markRecentAttrKey(did, svc.attrKey);
   const byKey = new Map<string, DidService>();
   for (const c of readCache(registry, did)) {
-    byKey.set(c.attrKey, {
-      id: c.id ?? `${did}#service-${c.attrKey}`,
-      type: c.type,
-      serviceEndpoint: c.serviceEndpoint,
-      attrKey: c.attrKey,
-      name: c.name,
-    });
+    byKey.set(c.attrKey, cachedToService(did, c));
   }
   byKey.set(svc.attrKey, svc);
   writeCache(registry, did, [...byKey.values()]);
+
+  const sync = readDidSyncState(registry, did);
+  if (sync) {
+    const all = new Map(
+      sync.services.map((c) => [c.attrKey, cachedToService(did, c)])
+    );
+    all.set(svc.attrKey, svc);
+    writeDidSyncState(registry, did, BigInt(sync.syncedToBlock), [
+      ...all.values(),
+    ]);
+  }
 }
 
 export function forgetDidService(
@@ -217,4 +309,53 @@ export function forgetDidService(
   } catch {
     /* ignore */
   }
+  const sync = readDidSyncState(registry, did);
+  if (sync) {
+    writeDidSyncState(
+      registry,
+      did,
+      BigInt(sync.syncedToBlock),
+      sync.services
+        .filter((c) => c.attrKey.toLowerCase() !== attrKey.toLowerCase())
+        .map((c) => cachedToService(did, c))
+    );
+  }
+}
+
+export function syncStateToServices(
+  did: string,
+  state: SyncState
+): DidService[] {
+  return state.services.map((c) => cachedToService(did, c));
+}
+
+/**
+ * After a publish batch: merge expected services into sync/cache so a warm
+ * resolve cannot drop attrs we just confirmed (lookback / flaky getLogs).
+ */
+export function seedExpectedDidServices(
+  registry: string,
+  did: string,
+  expected: DidService[]
+) {
+  if (!expected.length) return;
+  const byKey = new Map<string, DidService>();
+  const sync = readDidSyncState(registry, did);
+  if (sync) {
+    for (const c of sync.services) {
+      byKey.set(c.attrKey, cachedToService(did, c));
+    }
+  } else {
+    for (const c of readCache(registry, did)) {
+      byKey.set(c.attrKey, cachedToService(did, c));
+    }
+  }
+  for (const s of expected) {
+    if (!s.attrKey) continue;
+    byKey.set(s.attrKey, s);
+    markRecentAttrKey(did, s.attrKey);
+  }
+  const merged = [...byKey.values()];
+  const block = sync ? BigInt(sync.syncedToBlock) : 0n;
+  writeDidSyncState(registry, did, block, merged);
 }

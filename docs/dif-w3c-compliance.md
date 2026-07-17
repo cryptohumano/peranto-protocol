@@ -78,3 +78,7 @@ did:peranto:paseo:0x354151d1039Ba06862f8a5062b37BCb8b082cEDF
 Spec v0.1 (hecho) → Driver (hecho en repo) → Push imagen
     → PR W3C registry → PR uni-resolver → aparece en dev.uniresolver.io
 ```
+
+## Rendimiento / infra (evaluación)
+
+Notas sobre resolve por logs, RPC dedicado y posible storage on-chain: [perf-rpc-did-resolve.md](./perf-rpc-did-resolve.md).

@@ -2,10 +2,14 @@ import {
   PerantoClient,
   IndexedDbVault,
   vaultIdFromHash,
+  didRegistryAbi,
+  parseDid,
+  resolveDidMinimal,
   type VaultCredential,
   type ContractAddresses,
   type PerantoNetwork,
   type IssuedCredential,
+  type DidDocument,
 } from "@peranto/sdk";
 import type { Address, Hex } from "viem";
 import {
@@ -16,9 +20,13 @@ import {
 } from "./deployment";
 import { loadSession, type SessionIdentity } from "./session";
 import {
+  clearDidSyncState,
   forgetDidService,
   mergeDidDocumentServices,
+  readDidSyncState,
   rememberDidService,
+  syncStateToServices,
+  writeDidSyncState,
 } from "./did-service-cache";
 
 let cachedAddresses: ContractAddresses | null = null;
@@ -305,19 +313,88 @@ export async function portalClearDidService(
 
 export async function portalResolveDid(
   did: string,
-  opts?: { useCache?: boolean }
-) {
-  const client = await getReadClient();
-  const doc = await client.resolveDid(did);
-  // Public pages: chain-only — local cache is for the editor (RPC lookback gaps).
-  if (opts?.useCache === false) {
-    return doc;
+  opts?: {
+    useCache?: boolean;
+    /** Ignore sync cursor; full lookback. */
+    forceCold?: boolean;
+    /** Override cold lookback (blocks). Used by public pages. */
+    lookback?: bigint;
   }
+): Promise<DidDocument> {
+  const client = await getReadClient();
+  // Public / foreign resolve: wide cold lookback, then re-attach this-browser
+  // `recent` publishes (owner preview) without resurrecting full historical cache.
+  if (opts?.useCache === false) {
+    const doc = await client.resolveDid(did, {
+      lookback: opts.lookback ?? 2_000_000n,
+      chunkSize: 4_000n,
+      concurrency: 8,
+    });
+    try {
+      const addresses = await getAddresses();
+      return mergeDidDocumentServices(addresses.DIDRegistry, doc);
+    } catch {
+      return doc;
+    }
+  }
+
   try {
     const addresses = await getAddresses();
-    return mergeDidDocumentServices(addresses.DIDRegistry, doc);
+    const registry = addresses.DIDRegistry;
+    const { address } = parseDid(did);
+
+    if (opts?.forceCold) {
+      clearDidSyncState(registry, did);
+    }
+
+    const prev = opts?.forceCold ? null : readDidSyncState(registry, did);
+
+    const collectOpts = prev?.syncedToBlock
+      ? {
+          fromBlock: BigInt(prev.syncedToBlock) + 1n,
+          seedServices: syncStateToServices(did, prev),
+          chunkSize: 4_000n,
+          concurrency: 8,
+        }
+      : {
+          lookback: opts?.lookback ?? 2_000_000n,
+          chunkSize: 4_000n,
+          concurrency: 8,
+        };
+
+    const [deactivated, collected] = await Promise.all([
+      client.publicClient.readContract({
+        address: registry,
+        abi: didRegistryAbi,
+        functionName: "deactivated",
+        args: [address],
+      }),
+      client.collectDidServices(did, address, collectOpts),
+    ]);
+
+    // Sync snapshot is authoritative for the editor — overwrite cache.
+    writeDidSyncState(
+      registry,
+      did,
+      collected.syncedToBlock,
+      collected.services
+    );
+    const doc = resolveDidMinimal(
+      did,
+      Boolean(deactivated),
+      collected.services
+    );
+    // Only re-attach this-session publishes the RPC may have missed — never
+    // the full historical cache (that resurrected deleted linktr33 links).
+    return mergeDidDocumentServices(registry, doc);
   } catch {
-    return doc;
+    const doc = await client.resolveDid(did);
+    try {
+      const addresses = await getAddresses();
+      return mergeDidDocumentServices(addresses.DIDRegistry, doc);
+    } catch {
+      return doc;
+    }
   }
 }
 

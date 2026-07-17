@@ -11,10 +11,18 @@ import {
 /** Paseo / public RPCs often reject eth_getLogs from genesis or huge ranges. */
 const DEFAULT_LOOKBACK = 80_000n;
 const DEFAULT_CHUNK = 2_000n;
+/** Parallel eth_getLogs — keep modest to avoid public-RPC 429s. */
+const DEFAULT_CONCURRENCY = 8;
 
 type Client = {
   getBlockNumber: () => Promise<bigint>;
   getContractEvents: (args: GetContractEventsParameters) => Promise<Log[]>;
+};
+
+export type ChunkedLogsResult = {
+  logs: Log[];
+  fromBlock: bigint;
+  toBlock: bigint;
 };
 
 /**
@@ -22,6 +30,7 @@ type Client = {
  * Avoids `fromBlock: 0` which Hub TestNet eth-rpc rejects as Invalid params.
  *
  * Pass `fromBlock` (absolute) for incremental sync after the first lookback.
+ * Chunks run with bounded concurrency (default 8).
  */
 export async function getContractEventsChunked(
   client: Client,
@@ -36,49 +45,87 @@ export async function getContractEventsChunked(
     /** Absolute start block (overrides lookback window). */
     fromBlock?: bigint;
     toBlock?: bigint;
+    concurrency?: number;
   }
 ): Promise<Log[]> {
+  const { logs } = await getContractEventsChunkedDetailed(client, params);
+  return logs;
+}
+
+/** Same as `getContractEventsChunked` but also returns the scanned block range. */
+export async function getContractEventsChunkedDetailed(
+  client: Client,
+  params: {
+    address: Address;
+    abi: Abi;
+    eventName: string;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    args?: any;
+    lookback?: bigint;
+    chunkSize?: bigint;
+    fromBlock?: bigint;
+    toBlock?: bigint;
+    concurrency?: number;
+  }
+): Promise<ChunkedLogsResult> {
   const lookback = params.lookback ?? DEFAULT_LOOKBACK;
   const chunkSize = params.chunkSize ?? DEFAULT_CHUNK;
+  const concurrency = Math.max(1, params.concurrency ?? DEFAULT_CONCURRENCY);
   const latest = params.toBlock ?? (await client.getBlockNumber());
-  let from =
+  const from =
     params.fromBlock !== undefined
       ? params.fromBlock
       : latest > lookback
         ? latest - lookback
         : 0n;
-  if (from > latest) return [];
-  const out: Log[] = [];
+  if (from > latest) return { logs: [], fromBlock: from, toBlock: latest };
 
-  while (from <= latest) {
-    const to = from + chunkSize - 1n > latest ? latest : from + chunkSize - 1n;
-    try {
-      const piece = await client.getContractEvents({
-        address: params.address,
-        abi: params.abi,
-        eventName: params.eventName,
-        args: params.args,
-        fromBlock: from,
-        toBlock: to,
-      } as GetContractEventsParameters);
-      out.push(...piece);
-    } catch {
-      try {
-        const piece = await client.getContractEvents({
-          address: params.address,
-          abi: params.abi,
-          eventName: params.eventName,
-          fromBlock: from,
-          toBlock: to,
-        } as GetContractEventsParameters);
-        out.push(...piece);
-      } catch {
-        /* skip broken chunk */
-      }
-    }
-    from = to + 1n;
+  const ranges: Array<{ from: bigint; to: bigint }> = [];
+  for (let start = from; start <= latest; ) {
+    const to = start + chunkSize - 1n > latest ? latest : start + chunkSize - 1n;
+    ranges.push({ from: start, to });
+    start = to + 1n;
   }
-  return out;
+
+  const pieces: Log[][] = new Array(ranges.length);
+  for (let i = 0; i < ranges.length; i += concurrency) {
+    const batch = ranges.slice(i, i + concurrency);
+    const results = await Promise.all(
+      batch.map(async (range) => {
+        try {
+          return await client.getContractEvents({
+            address: params.address,
+            abi: params.abi,
+            eventName: params.eventName,
+            args: params.args,
+            fromBlock: range.from,
+            toBlock: range.to,
+          } as GetContractEventsParameters);
+        } catch {
+          try {
+            return await client.getContractEvents({
+              address: params.address,
+              abi: params.abi,
+              eventName: params.eventName,
+              fromBlock: range.from,
+              toBlock: range.to,
+            } as GetContractEventsParameters);
+          } catch {
+            return [] as Log[];
+          }
+        }
+      })
+    );
+    for (let j = 0; j < results.length; j++) {
+      pieces[i + j] = results[j];
+    }
+  }
+
+  return {
+    logs: pieces.flat(),
+    fromBlock: from,
+    toBlock: latest,
+  };
 }
 
 /** Default window for plain native transfers (block walk is heavier than getLogs). */

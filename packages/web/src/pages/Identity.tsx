@@ -29,6 +29,7 @@ import {
   saveJwtToVault,
   vault,
 } from "@/lib/client";
+import { deriveServiceSlot } from "@/lib/public-page";
 import { shortAddr, cn } from "@/lib/utils";
 import { FieldHint, HelpCallout } from "@/components/HelpCallout";
 import { VaultCredentialCard } from "@/components/VaultCredentialCard";
@@ -118,7 +119,8 @@ export function IdentityPage() {
       );
 
       try {
-        const doc = await client.resolveDid(s.did);
+        // Same path as /page — warm sync + recent merge (not bare SDK cold lookback).
+        const doc = await portalResolveDid(s.did);
         setDidDoc(doc);
         setServices(doc.service ?? []);
       } catch {
@@ -516,12 +518,15 @@ export function IdentityPage() {
               <FieldHint className="mt-2">
                 {SVC_PRESETS.find((p) => p.type === svcType)?.hint}
               </FieldHint>
-              <Label className="mt-2">Slot (opcional)</Label>
+              <Label className="mt-2">Slot / id (recomendado)</Label>
               <Input
                 value={svcKey}
                 onChange={(e) => setSvcKey(e.target.value)}
-                placeholder="web / lab"
+                placeholder="web / lab / github"
               />
+              <FieldHint>
+                Si lo dejas vacío se deriva del endpoint (nunca se publica bare).
+              </FieldHint>
               <Label className="mt-2">Endpoint</Label>
               <Input
                 value={svcEndpoint}
@@ -533,14 +538,22 @@ export function IdentityPage() {
                 disabled={busy || !svcEndpoint.trim()}
                 onClick={() =>
                   run(async () => {
+                    const endpoint = svcEndpoint.trim();
+                    const slot =
+                      svcKey.trim() ||
+                      deriveServiceSlot(svcType, endpoint, svcKey);
+                    if (!slot) {
+                      throw new Error("No se pudo derivar un slot para el servicio");
+                    }
                     await portalSetDidService(
                       svcType,
-                      svcEndpoint.trim(),
+                      endpoint,
                       session,
-                      svcKey.trim() || undefined
+                      slot
                     );
-                    setMsg("Servicio publicado");
+                    setMsg(`Servicio publicado (${svcType}.${slot})`);
                     setSvcEndpoint("");
+                    setSvcKey("");
                   })
                 }
               >
@@ -560,6 +573,11 @@ export function IdentityPage() {
                     >
                       <div className="min-w-0">
                         <p className="font-semibold">{s.type}</p>
+                        {s.attrKey && (
+                          <p className="font-mono text-[10px] text-muted-foreground">
+                            {s.attrKey}
+                          </p>
+                        )}
                         <p className="truncate text-xs text-[var(--color-ink)]/55">
                           {typeof s.serviceEndpoint === "string"
                             ? s.serviceEndpoint
@@ -595,12 +613,17 @@ export function IdentityPage() {
                     const doc = await portalResolveDid(session.did);
                     setDidDoc(doc);
                     setServices(doc.service ?? []);
-                    setMsg("Resolve OK");
+                    setMsg("Resolve OK (solo lectura — sin transacción)");
                   })
                 }
               >
                 Re-resolve
               </Button>
+              <FieldHint className="mt-2">
+                Re-resolve solo lee la chain / sync local. No escribe ni borra
+                atributos. Si falta un servicio aquí pero sigue en /page, suele
+                ser lookback RPC incompleto — no una tx fantasma.
+              </FieldHint>
             </Card>
             {didDoc && (
               <Card>
