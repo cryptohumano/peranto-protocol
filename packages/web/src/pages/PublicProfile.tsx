@@ -41,7 +41,9 @@ export function PublicProfilePage() {
   const [profile, setProfile] = useState<PublicPageProfile>({});
   const [links, setLinks] = useState<PublicPageLink[]>([]);
   const [badges, setBadges] = useState<ResolvedPublicBadge[]>([]);
+  const [badgesLoading, setBadgesLoading] = useState(false);
 
+  // Fast path: identity + Document from v0.2 storage (no getLogs).
   useEffect(() => {
     if (!ref) {
       setErr("Falta @nombre, DID o address");
@@ -52,11 +54,10 @@ export function PublicProfilePage() {
     void (async () => {
       setLoading(true);
       setErr("");
+      setBadges([]);
       try {
         const resolved = await portalResolveIdentityRef(ref);
-        // Prefer warm sync for this DID when the browser already has a seed
-        // (e.g. after editing /page). First visit still does a wide cold lookback.
-        const doc = await portalResolveDid(resolved.did);
+        const doc = await portalResolveDid(resolved.did, { storageOnly: true });
         if (cancelled) return;
         const { profile: p, links: L } = profileFromDocument(doc);
         setDid(resolved.did);
@@ -66,31 +67,6 @@ export function PublicProfilePage() {
         );
         setProfile(p);
         setLinks(L);
-
-        const client = await getReadClient();
-        const featured = p.badges ?? [];
-        const resolvedBadges: ResolvedPublicBadge[] = await Promise.all(
-          featured.map(async (b) => {
-            try {
-              const st = await client.getCredentialStatus(b.credHash);
-              const subjectOk =
-                st.subject.toLowerCase() === resolved.address.toLowerCase();
-              return {
-                ...b,
-                status: subjectOk
-                  ? statusLabelFromCode(st.st)
-                  : ("None" as const),
-              };
-            } catch {
-              return { ...b, status: "Unknown" as const };
-            }
-          })
-        );
-        if (!cancelled) {
-          // Show all featured; non-Active stay visible but muted so owners
-          // understand “en PerantoPage pero sin ancla en este registry”.
-          setBadges(resolvedBadges);
-        }
       } catch (e) {
         if (!cancelled) {
           setErr(e instanceof Error ? e.message : String(e));
@@ -103,6 +79,48 @@ export function PublicProfilePage() {
       cancelled = true;
     };
   }, [ref]);
+
+  // Deferred: credential badge status (does not block hero / links).
+  useEffect(() => {
+    const featured = profile.badges ?? [];
+    if (!address || featured.length === 0) {
+      setBadges([]);
+      setBadgesLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setBadgesLoading(true);
+    void (async () => {
+      try {
+        const client = await getReadClient();
+        const resolvedBadges: ResolvedPublicBadge[] = await Promise.all(
+          featured.map(async (b) => {
+            try {
+              const st = await client.getCredentialStatus(b.credHash);
+              const subjectOk =
+                st.subject.toLowerCase() === address.toLowerCase();
+              return {
+                ...b,
+                status: subjectOk
+                  ? statusLabelFromCode(st.st)
+                  : ("None" as const),
+              };
+            } catch {
+              return { ...b, status: "Unknown" as const };
+            }
+          })
+        );
+        if (!cancelled) setBadges(resolvedBadges);
+      } catch {
+        if (!cancelled) setBadges([]);
+      } finally {
+        if (!cancelled) setBadgesLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [address, profile.badges]);
 
   const theme = themeTokens(resolvePageThemeId(profile.theme));
   const layout = resolvePageLayoutId(profile.layout);
@@ -188,7 +206,7 @@ export function PublicProfilePage() {
               className="size-8 animate-spin"
               style={{ color: accent }}
             />
-            <p className="text-sm">Resolviendo identidad…</p>
+            <p className="text-sm">Cargando perfil…</p>
           </div>
         )}
 
@@ -244,6 +262,21 @@ export function PublicProfilePage() {
                 >
                   {profile.bio}
                 </p>
+              )}
+              {badgesLoading && (profile.badges?.length ?? 0) > 0 && (
+                <div
+                  className={cn(
+                    "mt-5 flex items-center gap-2 text-xs",
+                    layout === "rail" ? "justify-start" : "justify-center"
+                  )}
+                  style={{ color: theme.muted }}
+                >
+                  <Loader2
+                    className="size-3.5 animate-spin"
+                    style={{ color: accent }}
+                  />
+                  Credenciales…
+                </div>
               )}
               {badges.length > 0 && (
                 <div

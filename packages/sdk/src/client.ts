@@ -105,6 +105,11 @@ export type CollectDidServicesOpts = {
    * `[fromBlock, toBlock]` window — use with `fromBlock = lastSynced + 1`.
    */
   seedServices?: DidService[];
+  /**
+   * Never fall back to `eth_getLogs`. Use for public pages (linktr33):
+   * v0.2 storage only — empty Document if the identity has no on-chain attrs.
+   */
+  storageOnly?: boolean;
 };
 
 export type CollectDidServicesResult = {
@@ -269,15 +274,21 @@ export class PerantoClient {
         functionName: "delegateCount",
         args: [identity],
       })) as bigint;
+      if (count === 0n) return [];
       const now = Math.floor(Date.now() / 1000);
+      const n = Number(count);
+      const rows = await Promise.all(
+        Array.from({ length: n }, (_, i) =>
+          this.publicClient.readContract({
+            address: this.addresses.DIDRegistry,
+            abi: didRegistryAbi,
+            functionName: "delegateAt",
+            args: [identity, BigInt(i)],
+          }) as Promise<[Hex, Address, bigint]>
+        )
+      );
       const out: DidDelegate[] = [];
-      for (let i = 0n; i < count; i++) {
-        const row = (await this.publicClient.readContract({
-          address: this.addresses.DIDRegistry,
-          abi: didRegistryAbi,
-          functionName: "delegateAt",
-          args: [identity, i],
-        })) as [Hex, Address, bigint];
+      for (const row of rows) {
         const validTo = Number(row[2]);
         if (validTo <= now) continue;
         out.push({
@@ -295,7 +306,7 @@ export class PerantoClient {
 
   /**
    * Prefer on-chain attribute storage (v0.2). Fall back to event lookback when
-   * storage is empty / unsupported (legacy registry or fresh identity).
+   * storage is unsupported (legacy registry), unless `storageOnly`.
    */
   async collectDidServices(
     did: string,
@@ -304,12 +315,22 @@ export class PerantoClient {
   ): Promise<CollectDidServicesResult> {
     const fromStorage = await this.collectDidServicesFromStorage(did, identity);
     if (fromStorage?.supported) {
-      const latest = await this.publicClient.getBlockNumber();
+      let syncedToBlock = 0n;
+      if (!opts?.storageOnly) {
+        try {
+          syncedToBlock = await this.publicClient.getBlockNumber();
+        } catch {
+          syncedToBlock = 0n;
+        }
+      }
       return {
         services: fromStorage.services,
         purposeVms: fromStorage.purposeVms,
-        syncedToBlock: latest,
+        syncedToBlock,
       };
+    }
+    if (opts?.storageOnly) {
+      return { services: [], purposeVms: [], syncedToBlock: 0n };
     }
     return this.collectDidServicesFromEvents(did, identity, opts);
   }
@@ -332,31 +353,60 @@ export class PerantoClient {
       const now = Math.floor(Date.now() / 1000);
       const out: DidService[] = [];
       const purposeVms: DidPurposeVm[] = [];
-      for (let i = 0n; i < count; i++) {
-        const name = (await this.publicClient.readContract({
-          address: this.addresses.DIDRegistry,
-          abi: didRegistryAbi,
-          functionName: "attributeNameAt",
-          args: [identity, i],
-        })) as Hex;
+      if (count === 0n) {
+        return { services: out, purposeVms, supported: true };
+      }
+
+      const n = Number(count);
+      // Parallel eth_calls (avoids sequential round-trips; no Multicall3 dependency).
+      const names = await Promise.all(
+        Array.from({ length: n }, (_, i) =>
+          this.publicClient.readContract({
+            address: this.addresses.DIDRegistry,
+            abi: didRegistryAbi,
+            functionName: "attributeNameAt",
+            args: [identity, BigInt(i)],
+          }) as Promise<Hex>
+        )
+      );
+
+      const interesting: { name: Hex; nameStr: string; kind: "svc" | "vm" }[] =
+        [];
+      for (const name of names) {
         const nameStr = attributeNameFromBytes32(name);
-        const isSvc = isServiceAttributeName(nameStr);
-        const isVm = isVmAttributeName(nameStr);
-        if (!isSvc && !isVm) continue;
-        const row = (await this.publicClient.readContract({
-          address: this.addresses.DIDRegistry,
-          abi: didRegistryAbi,
-          functionName: "getAttribute",
-          args: [identity, name],
-        })) as [Hex, bigint, boolean];
-        const [value, validTo, active] = row;
+        if (isServiceAttributeName(nameStr)) {
+          interesting.push({ name, nameStr, kind: "svc" });
+        } else if (isVmAttributeName(nameStr)) {
+          interesting.push({ name, nameStr, kind: "vm" });
+        }
+      }
+
+      if (interesting.length === 0) {
+        return { services: out, purposeVms, supported: true };
+      }
+
+      const rows = await Promise.all(
+        interesting.map(
+          (item) =>
+            this.publicClient.readContract({
+              address: this.addresses.DIDRegistry,
+              abi: didRegistryAbi,
+              functionName: "getAttribute",
+              args: [identity, item.name],
+            }) as Promise<[Hex, bigint, boolean]>
+        )
+      );
+
+      for (let i = 0; i < interesting.length; i++) {
+        const item = interesting[i]!;
+        const [value, validTo, active] = rows[i]!;
         if (!active || Number(validTo) <= now) continue;
-        if (isSvc) {
-          const type = serviceTypeFromAttributeName(nameStr);
-          const attrKey = serviceAttrKeyFromAttributeName(nameStr);
+        if (item.kind === "svc") {
+          const type = serviceTypeFromAttributeName(item.nameStr);
+          const attrKey = serviceAttrKeyFromAttributeName(item.nameStr);
           const svc = decodeDidServiceValue(value, type, did);
           if (svc) {
-            const slot = serviceSlotFromAttributeName(nameStr);
+            const slot = serviceSlotFromAttributeName(item.nameStr);
             out.push({
               ...svc,
               attrKey,
@@ -364,7 +414,7 @@ export class PerantoClient {
             });
           }
         } else {
-          const rel = vmRelationshipFromAttributeName(nameStr);
+          const rel = vmRelationshipFromAttributeName(item.nameStr);
           if (!rel) continue;
           const vm = decodeDidPurposeVmValue(value, rel, did);
           if (vm) purposeVms.push(vm);

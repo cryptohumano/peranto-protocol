@@ -782,7 +782,7 @@ export function IdentityPage() {
                     if (didDoc?.capabilityInvocation?.includes(vm.id))
                       rels.push("capabilityInvocation");
                     const addrMatch = /eip155:\d+:(0x[a-fA-F0-9]{40})/.exec(
-                      vm.blockchainAccountId
+                      vm.blockchainAccountId ?? ""
                     );
                     const addr = addrMatch?.[1] as Address | undefined;
                     const typeFrag = vm.id.includes("sigAuth")

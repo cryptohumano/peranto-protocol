@@ -377,9 +377,20 @@ export async function portalResolveDid(
     forceCold?: boolean;
     /** Override cold lookback (blocks). Used by public pages. */
     lookback?: bigint;
+    /**
+     * Public linktr33 path: v0.2 storage only (no eth_getLogs).
+     * Fast cold resolve for `/u/:ref`.
+     */
+    storageOnly?: boolean;
   }
 ): Promise<DidDocument> {
   const client = await getReadClient();
+
+  // Public profile: storage-first, never scan logs.
+  if (opts?.storageOnly) {
+    return client.resolveDid(did, { storageOnly: true });
+  }
+
   // Public / foreign resolve: wide cold lookback, then re-attach this-browser
   // `recent` publishes (owner preview) without resurrecting full historical cache.
   if (opts?.useCache === false) {
