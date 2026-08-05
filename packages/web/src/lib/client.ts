@@ -4,7 +4,7 @@ import {
   vaultIdFromHash,
   didRegistryAbi,
   parseDid,
-  resolveDidMinimal,
+  resolveDidDocument,
   type VaultCredential,
   type ContractAddresses,
   type PerantoNetwork,
@@ -55,6 +55,7 @@ export async function getWriteClient(session?: SessionIdentity | null) {
     addresses,
     rpcUrl: DEFAULT_RPC,
     privateKey: s.privateKey,
+    mnemonic: s.mnemonic,
   });
 }
 
@@ -267,6 +268,63 @@ export async function portalSetDidService(
   return out;
 }
 
+export async function portalAddDidDelegate(
+  delegateType: string,
+  delegate: Address,
+  validitySeconds: bigint,
+  session?: SessionIdentity | null
+) {
+  const s = session ?? loadSession();
+  if (writeMode(s) === "aura") {
+    return auraAction("did.addDelegate", {
+      delegateType,
+      delegate,
+      validitySeconds: validitySeconds.toString(),
+    });
+  }
+  const client = await getWriteClient(s);
+  return client.addDelegate({
+    delegateType,
+    delegate,
+    validitySeconds,
+  });
+}
+
+export async function portalPublishPurposeKeys(
+  session?: SessionIdentity | null
+) {
+  const s = session ?? loadSession();
+  if (writeMode(s) === "aura") {
+    return auraAction<{ hashes: Hex[]; did: string }>(
+      "did.publishPurposeKeys",
+      {}
+    );
+  }
+  if (!s?.mnemonic) {
+    throw new Error(
+      "Publicar claves de propósito requiere mnemonic BIP39 (no solo clave EVM)"
+    );
+  }
+  const client = await getWriteClient(s);
+  return client.publishPurposeKeysFromMnemonic(s.mnemonic);
+}
+
+export async function portalRevokeDidDelegate(
+  delegateType: string,
+  delegate: Address,
+  session?: SessionIdentity | null
+) {
+  const s = session ?? loadSession();
+  if (writeMode(s) === "aura") {
+    return auraAction("did.revokeDelegate", {
+      delegateType,
+      delegate,
+    });
+  }
+  const client = await getWriteClient(s);
+  return client.revokeDelegate({ delegateType, delegate });
+}
+
 export async function portalClearDidService(
   typeOrAttrKey: string,
   session?: SessionIdentity | null,
@@ -362,7 +420,7 @@ export async function portalResolveDid(
           concurrency: 8,
         };
 
-    const [deactivated, collected] = await Promise.all([
+    const [deactivated, collected, delegates] = await Promise.all([
       client.publicClient.readContract({
         address: registry,
         abi: didRegistryAbi,
@@ -370,6 +428,7 @@ export async function portalResolveDid(
         args: [address],
       }),
       client.collectDidServices(did, address, collectOpts),
+      client.collectDidDelegates(address),
     ]);
 
     // Sync snapshot is authoritative for the editor — overwrite cache.
@@ -379,10 +438,12 @@ export async function portalResolveDid(
       collected.syncedToBlock,
       collected.services
     );
-    const doc = resolveDidMinimal(
+    const doc = resolveDidDocument(
       did,
       Boolean(deactivated),
-      collected.services
+      collected.services,
+      delegates,
+      collected.purposeVms
     );
     // Only re-attach this-session publishes the RPC may have missed — never
     // the full historical cache (that resurrected deleted linktr33 links).

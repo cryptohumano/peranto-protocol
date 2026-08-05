@@ -22,6 +22,34 @@ export const didRegistryAbi = [
   },
   {
     type: "function",
+    name: "DELEGATE_SVC",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "bytes32" }],
+  },
+  {
+    type: "function",
+    name: "DELEGATE_SIG_AUTH",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "bytes32" }],
+  },
+  {
+    type: "function",
+    name: "DELEGATE_VERI_KEY",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "bytes32" }],
+  },
+  {
+    type: "function",
+    name: "isServiceAttributeName",
+    stateMutability: "pure",
+    inputs: [{ name: "name", type: "bytes32" }],
+    outputs: [{ type: "bool" }],
+  },
+  {
+    type: "function",
     name: "setAttribute",
     stateMutability: "nonpayable",
     inputs: [
@@ -34,10 +62,144 @@ export const didRegistryAbi = [
   },
   {
     type: "function",
+    name: "getAttribute",
+    stateMutability: "view",
+    inputs: [
+      { name: "identity", type: "address" },
+      { name: "name", type: "bytes32" },
+    ],
+    outputs: [
+      { name: "value", type: "bytes" },
+      { name: "validTo", type: "uint256" },
+      { name: "active", type: "bool" },
+    ],
+  },
+  {
+    type: "function",
+    name: "attributeCount",
+    stateMutability: "view",
+    inputs: [{ name: "identity", type: "address" }],
+    outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "attributeNameAt",
+    stateMutability: "view",
+    inputs: [
+      { name: "identity", type: "address" },
+      { name: "index", type: "uint256" },
+    ],
+    outputs: [{ type: "bytes32" }],
+  },
+  {
+    type: "function",
+    name: "activeAttributeCount",
+    stateMutability: "view",
+    inputs: [{ name: "identity", type: "address" }],
+    outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "changeOwner",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "identity", type: "address" },
+      { name: "newOwner", type: "address" },
+    ],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "addDelegate",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "identity", type: "address" },
+      { name: "delegateType", type: "bytes32" },
+      { name: "delegate", type: "address" },
+      { name: "validity", type: "uint256" },
+    ],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "revokeDelegate",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "identity", type: "address" },
+      { name: "delegateType", type: "bytes32" },
+      { name: "delegate", type: "address" },
+    ],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "validDelegate",
+    stateMutability: "view",
+    inputs: [
+      { name: "identity", type: "address" },
+      { name: "delegateType", type: "bytes32" },
+      { name: "delegate", type: "address" },
+    ],
+    outputs: [{ type: "bool" }],
+  },
+  {
+    type: "function",
+    name: "delegates",
+    stateMutability: "view",
+    inputs: [
+      { name: "identity", type: "address" },
+      { name: "delegateType", type: "bytes32" },
+      { name: "delegate", type: "address" },
+    ],
+    outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "delegateCount",
+    stateMutability: "view",
+    inputs: [{ name: "identity", type: "address" }],
+    outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "delegateAt",
+    stateMutability: "view",
+    inputs: [
+      { name: "identity", type: "address" },
+      { name: "index", type: "uint256" },
+    ],
+    outputs: [
+      { name: "delegateType", type: "bytes32" },
+      { name: "delegate", type: "address" },
+      { name: "validTo", type: "uint256" },
+    ],
+  },
+  {
+    type: "function",
     name: "deactivate",
     stateMutability: "nonpayable",
     inputs: [{ name: "identity", type: "address" }],
     outputs: [],
+  },
+  {
+    type: "event",
+    name: "DIDOwnerChanged",
+    inputs: [
+      { name: "identity", type: "address", indexed: true },
+      { name: "owner", type: "address", indexed: false },
+      { name: "previousChange", type: "uint256", indexed: false },
+    ],
+  },
+  {
+    type: "event",
+    name: "DIDDelegateChanged",
+    inputs: [
+      { name: "identity", type: "address", indexed: true },
+      { name: "delegateType", type: "bytes32", indexed: false },
+      { name: "delegate", type: "address", indexed: false },
+      { name: "validTo", type: "uint256", indexed: false },
+      { name: "previousChange", type: "uint256", indexed: false },
+    ],
   },
   {
     type: "event",
@@ -59,6 +221,7 @@ export const didRegistryAbi = [
     ],
   },
 ] as const;
+
 
 export const schemaRegistryAbi = [
   {

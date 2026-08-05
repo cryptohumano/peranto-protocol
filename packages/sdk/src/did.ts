@@ -47,6 +47,9 @@ const DID_RE =
 /** Attribute name prefix for DID Document services (ERC-1056 / ethr-did style). */
 export const DID_SVC_PREFIX = "did/svc/";
 
+/** Attribute name prefix for purpose verification methods (method v0.2.1). */
+export const DID_VM_PREFIX = "did/vm/";
+
 /** Default validity for services (~100 years). Use 0 to expire immediately (clear). */
 export const DID_SERVICE_DEFAULT_VALIDITY = 60n * 60n * 24n * 365n * 100n;
 
@@ -107,13 +110,44 @@ export type DidDocument = {
     id: string;
     type: string;
     controller: string;
-    blockchainAccountId: string;
+    blockchainAccountId?: string;
+    publicKeyJwk?: {
+      kty: string;
+      crv?: string;
+      x?: string;
+      y?: string;
+      [k: string]: unknown;
+    };
+    publicKeyMultibase?: string;
   }>;
   authentication: string[];
   assertionMethod: string[];
+  /** Peranto v0.2.1: X25519 purpose key when published. */
+  keyAgreement?: string[];
+  /** Peranto v0.2: `svc` delegates (may update did/svc/* on-chain). */
+  capabilityInvocation?: string[];
   service?: DidService[];
   deactivated?: boolean;
 };
+
+/** On-chain delegate type bytes32 (UTF-8 left-aligned). */
+export const DELEGATE_TYPE_SVC = "svc";
+export const DELEGATE_TYPE_SIG_AUTH = "sigAuth";
+export const DELEGATE_TYPE_VERI_KEY = "veriKey";
+
+export type DidDelegate = {
+  delegateType: string;
+  address: Address;
+  validTo: number;
+};
+
+export function delegateTypeToBytes32(type: string): Hex {
+  return attributeNameToBytes32(type.trim());
+}
+
+export function delegateTypeFromBytes32(name: Hex): string {
+  return attributeNameFromBytes32(name);
+}
 
 /**
  * Encode a short ASCII attribute name as bytes32 (right-padded), ERC-1056 style.
@@ -171,6 +205,99 @@ export function serviceSlotFromAttributeName(name: string): string | undefined {
   return dot === -1 ? undefined : key.slice(dot + 1);
 }
 
+export type DidVmRelationship =
+  | "authentication"
+  | "assertionMethod"
+  | "keyAgreement";
+
+/** On-chain purpose VM decoded from `did/vm/*` attributes. */
+export type DidPurposeVm = {
+  relationship: DidVmRelationship;
+  id: string;
+  type: string;
+  blockchainAccountId?: string;
+  publicKeyJwk?: DidDocument["verificationMethod"][number]["publicKeyJwk"];
+  publicKeyMultibase?: string;
+};
+
+const VM_RELATIONSHIPS: DidVmRelationship[] = [
+  "authentication",
+  "assertionMethod",
+  "keyAgreement",
+];
+
+export function vmAttributeName(relationship: DidVmRelationship): Hex {
+  return attributeNameToBytes32(`${DID_VM_PREFIX}${relationship}`);
+}
+
+export function isVmAttributeName(name: string): boolean {
+  return name.startsWith(DID_VM_PREFIX) && name.length > DID_VM_PREFIX.length;
+}
+
+export function vmRelationshipFromAttributeName(
+  name: string
+): DidVmRelationship | null {
+  const rel = name.slice(DID_VM_PREFIX.length);
+  return VM_RELATIONSHIPS.includes(rel as DidVmRelationship)
+    ? (rel as DidVmRelationship)
+    : null;
+}
+
+export function encodeDidPurposeVmValue(vm: {
+  id: string;
+  type: string;
+  blockchainAccountId?: string;
+  publicKeyJwk?: DidPurposeVm["publicKeyJwk"];
+  publicKeyMultibase?: string;
+}): Hex {
+  const body: Record<string, unknown> = {
+    id: vm.id,
+    type: vm.type,
+  };
+  if (vm.blockchainAccountId) body.blockchainAccountId = vm.blockchainAccountId;
+  if (vm.publicKeyJwk) body.publicKeyJwk = vm.publicKeyJwk;
+  if (vm.publicKeyMultibase) body.publicKeyMultibase = vm.publicKeyMultibase;
+  return bytesToHex(stringToBytes(JSON.stringify(body)));
+}
+
+export function decodeDidPurposeVmValue(
+  value: Hex,
+  relationship: DidVmRelationship,
+  did: string
+): DidPurposeVm | null {
+  if (!value || value === "0x") return null;
+  try {
+    const text = hexToString(value);
+    const parsed = JSON.parse(text) as Partial<DidPurposeVm>;
+    const id =
+      typeof parsed.id === "string" && parsed.id
+        ? parsed.id
+        : `${did}#key-${relationship === "assertionMethod" ? "assertion" : relationship === "authentication" ? "authentication" : "agreement"}`;
+    const type =
+      typeof parsed.type === "string" && parsed.type
+        ? parsed.type
+        : relationship === "keyAgreement"
+          ? "X25519KeyAgreementKey2020"
+          : "EcdsaSecp256k1RecoveryMethod2020";
+    const out: DidPurposeVm = { relationship, id, type };
+    if (typeof parsed.blockchainAccountId === "string") {
+      out.blockchainAccountId = parsed.blockchainAccountId;
+    }
+    if (parsed.publicKeyJwk && typeof parsed.publicKeyJwk === "object") {
+      out.publicKeyJwk = parsed.publicKeyJwk;
+    }
+    if (typeof parsed.publicKeyMultibase === "string") {
+      out.publicKeyMultibase = parsed.publicKeyMultibase;
+    }
+    if (!out.blockchainAccountId && !out.publicKeyJwk && !out.publicKeyMultibase) {
+      return null;
+    }
+    return out;
+  } catch {
+    return null;
+  }
+}
+
 /** Encode service payload for `DIDRegistry.setAttribute` value. */
 export function encodeDidServiceValue(service: {
   id?: string;
@@ -225,29 +352,113 @@ export function decodeDidServiceValue(
 }
 
 /** Minimal / implicit resolve (no chain reads). Enriched resolve is via PerantoClient.resolveDid. */
-export function resolveDidMinimal(
+/**
+ * Build a DID Document from controller + optional services, delegates, and purpose VMs.
+ * Method v0.2: `sigAuth` → authentication, `veriKey` → assertionMethod,
+ * `svc` → capabilityInvocation.
+ * Method v0.2.1: `did/vm/*` purpose keys override/enrich authentication, assertionMethod, keyAgreement.
+ */
+export function resolveDidDocument(
   did: string,
   deactivated = false,
-  services?: DidService[]
+  services?: DidService[],
+  delegates?: DidDelegate[],
+  purposeVms?: DidPurposeVm[]
 ): DidDocument {
   const { network, address } = parseDid(did);
   const chainId = NETWORK_CHAIN_ID[network];
   const vmId = `${did}#controller`;
+  const verificationMethod: DidDocument["verificationMethod"] = [
+    {
+      id: vmId,
+      type: "EcdsaSecp256k1RecoveryMethod2020",
+      controller: did,
+      blockchainAccountId: `eip155:${chainId}:${checksumAddress(address)}`,
+    },
+  ];
+  const authentication: string[] = [vmId];
+  let assertionMethod: string[] = [vmId];
+  const capabilityInvocation: string[] = [];
+  const keyAgreement: string[] = [];
+
+  const now = Math.floor(Date.now() / 1000);
+  for (const d of delegates ?? []) {
+    if (d.validTo <= now) continue;
+    const type = d.delegateType.trim();
+    const frag =
+      type === DELEGATE_TYPE_SIG_AUTH
+        ? "sigAuth"
+        : type === DELEGATE_TYPE_VERI_KEY
+          ? "veriKey"
+          : type === DELEGATE_TYPE_SVC
+            ? "svc"
+            : type.replace(/[^a-zA-Z0-9_-]/g, "") || "delegate";
+    const id = `${did}#delegate-${frag}-${d.address.toLowerCase().slice(2, 10)}`;
+    if (!verificationMethod.some((vm) => vm.id === id)) {
+      verificationMethod.push({
+        id,
+        type: "EcdsaSecp256k1RecoveryMethod2020",
+        controller: did,
+        blockchainAccountId: `eip155:${chainId}:${checksumAddress(d.address)}`,
+      });
+    }
+    if (type === DELEGATE_TYPE_SIG_AUTH && !authentication.includes(id)) {
+      authentication.push(id);
+    }
+    if (type === DELEGATE_TYPE_VERI_KEY && !assertionMethod.includes(id)) {
+      assertionMethod.push(id);
+    }
+    if (type === DELEGATE_TYPE_SVC && !capabilityInvocation.includes(id)) {
+      capabilityInvocation.push(id);
+    }
+  }
+
+  let hasAssertionPurpose = false;
+  for (const p of purposeVms ?? []) {
+    const entry: DidDocument["verificationMethod"][number] = {
+      id: p.id,
+      type: p.type,
+      controller: did,
+    };
+    if (p.blockchainAccountId) entry.blockchainAccountId = p.blockchainAccountId;
+    if (p.publicKeyJwk) entry.publicKeyJwk = p.publicKeyJwk;
+    if (p.publicKeyMultibase) entry.publicKeyMultibase = p.publicKeyMultibase;
+    if (!verificationMethod.some((vm) => vm.id === p.id)) {
+      verificationMethod.push(entry);
+    }
+    if (p.relationship === "authentication" && !authentication.includes(p.id)) {
+      authentication.push(p.id);
+    }
+    if (p.relationship === "assertionMethod") {
+      hasAssertionPurpose = true;
+      if (!assertionMethod.includes(p.id)) assertionMethod.push(p.id);
+    }
+    if (p.relationship === "keyAgreement" && !keyAgreement.includes(p.id)) {
+      keyAgreement.push(p.id);
+    }
+  }
+  if (hasAssertionPurpose) {
+    assertionMethod = assertionMethod.filter((id) => id !== vmId);
+    if (!assertionMethod.length) {
+      const assertVm = purposeVms?.find((p) => p.relationship === "assertionMethod");
+      if (assertVm) assertionMethod = [assertVm.id];
+    }
+  }
+
   const doc: DidDocument = {
     "@context": ["https://www.w3.org/ns/did/v1"],
     id: did,
     controller: did,
-    verificationMethod: [
-      {
-        id: vmId,
-        type: "EcdsaSecp256k1RecoveryMethod2020",
-        controller: did,
-        blockchainAccountId: `eip155:${chainId}:${checksumAddress(address)}`,
-      },
-    ],
-    authentication: [vmId],
-    assertionMethod: [vmId],
+    verificationMethod,
+    authentication,
+    assertionMethod,
   };
+  if (keyAgreement.length) {
+    doc.keyAgreement = keyAgreement;
+  }
+  if (capabilityInvocation.length) {
+    doc.capabilityInvocation = capabilityInvocation;
+  }
   if (services && services.length > 0) {
     doc.service = services;
   }
@@ -255,6 +466,15 @@ export function resolveDidMinimal(
     doc.deactivated = true;
   }
   return doc;
+}
+
+/** @deprecated Prefer `resolveDidDocument` (v0.2). */
+export function resolveDidMinimal(
+  did: string,
+  deactivated = false,
+  services?: DidService[]
+): DidDocument {
+  return resolveDidDocument(did, deactivated, services);
 }
 
 export function schemaIdFromKey(key: string): Hex {

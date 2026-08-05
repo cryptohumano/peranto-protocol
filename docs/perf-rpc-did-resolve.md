@@ -10,13 +10,15 @@ Notas de evaluación (2026-07). Contexto: el editor `/page` (linktr33) y la pest
 
 ## Cuello de botella estructural
 
-`DIDRegistry` (estilo ERC-1056) **no guarda** el mapa de atributos activos: solo emite `DIDAttributeChanged`. El resolve = escanear logs + “último write gana”.
+`DIDRegistry` **v0.1** (estilo ERC-1056) **no guardaba** el mapa de atributos activos: solo emitía `DIDAttributeChanged`. El resolve = escanear logs + “último write gana”.
 
-Eso es correcto para un método DID minimalista, pero:
+**v0.2** escribe storage enumerable **y** emite el evento. Resolve hot-path = `attributeCount` / `getAttribute` (pocos `eth_call`). El lookback de logs queda como fallback para registries legacy.
 
-- Cold resolve en RPC público ≈ cientos de `eth_getLogs`.
-- Ventanas cortas hacen “desaparecer” servicios viejos.
-- Rate limit del RPC público de Paseo empeora la UX, pero **no es la causa raíz**.
+Eso es correcto para un método DID minimalista en v0.1, pero:
+
+- Cold resolve en RPC público ≈ cientos de `eth_getLogs` (solo legacy).
+- Ventanas cortas hacen “desaparecer” servicios viejos (solo legacy).
+- Rate limit del RPC público de Paseo empeora la UX, pero **no es la causa raíz** tras v0.2 storage.
 
 ## Evaluación: RPC propio / dedicado
 
@@ -43,26 +45,19 @@ Variables candidatas (por definir):
 
 **Esfuerzo medio, sin redeploy de lógica de identidad.**
 
-### B. Storage on-chain de attrs activos (breaking / upgrade)
+### B. Storage on-chain de attrs activos — **implementado en v0.2**
 
-Añadir en `DIDRegistry` (o contrato satélite):
+`DIDRegistry` (método 0.2) incluye:
 
 ```solidity
-// sketch — no implementado
 mapping(address => mapping(bytes32 => bytes)) public attributeValue;
 mapping(address => mapping(bytes32 => uint256)) public attributeValidTo;
-bytes32[] /* o enumerable set */ activeNames;
+// + enumerable names + scoped svc delegates
 ```
 
 `setAttribute` escribe storage **y** emite el evento. Resolve = leer storage (pocos `eth_call`), no escanear logs.
 
-| Pros | Contras |
-|------|---------|
-| Resolve O(attrs) no O(bloques) | Gas por write más alto |
-| UX portal inmediata | Migración / nuevo deploy; DIDs viejos solo-evento |
-| Menos dependencia de RPC getLogs | Hay que diseñar enumeración de keys |
-
-**Recomendación de evaluación:** prototipar B en testnet como `DIDRegistryV2` o extensión `DIDAttributeStore` que el resolve consulte primero, con fallback a logs. No bloquear compliance W3C del método actual (v0.1 sigue siendo event enrichment).
+Tras redeploy en Paseo, attrs del registry v0.1 **no migran** — re-publicar services desde el portal.
 
 ### C. Híbrido
 

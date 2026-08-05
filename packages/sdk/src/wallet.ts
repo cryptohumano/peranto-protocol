@@ -1,6 +1,7 @@
 import { cryptoWaitReady, mnemonicGenerate, mnemonicValidate } from "@polkadot/util-crypto";
 import { Keyring } from "@polkadot/keyring";
 import { hexToU8a, u8aToHex } from "@polkadot/util";
+import { edwardsToMontgomeryPub } from "@noble/curves/ed25519";
 import { HDKey } from "@scure/bip32";
 import { mnemonicToSeedSync } from "@scure/bip39";
 import { type Address, type Hex, recoverMessageAddress } from "viem";
@@ -36,7 +37,52 @@ export type MultiKeyIdentity = {
   evmMappedAccountId32: Hex;
 };
 
-const ETH_PATH = "m/44'/60'/0'/0/0";
+/** BIP44 ETH — controller / DID id / gas (method v0.2.1). */
+export const ETH_PATH_CONTROLLER = "m/44'/60'/0'/0/0";
+/** BIP44 ETH — authentication (login / SIWE). */
+export const ETH_PATH_AUTHENTICATION = "m/44'/60'/0'/0/1";
+/** BIP44 ETH — assertionMethod (JWT-VC ES256K). */
+export const ETH_PATH_ASSERTION = "m/44'/60'/0'/0/2";
+/** Substrate hard URI — Ed25519 seed → X25519 keyAgreement. */
+export const KEY_AGREEMENT_URI_SUFFIX = "//did//keyAgreement//0";
+
+const ETH_PATH = ETH_PATH_CONTROLLER;
+
+export type PurposeSecpKey = {
+  path: string;
+  privateKey: Hex;
+  address: Address;
+  fragment: string;
+};
+
+export type PurposeKeyAgreement = {
+  uriSuffix: string;
+  /** Ed25519 public key (hex) before Montgomery conversion. */
+  ed25519PublicKey: Hex;
+  /** X25519 public key (32 bytes hex). */
+  x25519PublicKey: Hex;
+  /** JWK for DID Document (`X25519KeyAgreementKey2020`). */
+  publicKeyJwk: {
+    kty: "OKP";
+    crv: "X25519";
+    x: string;
+  };
+  fragment: string;
+};
+
+/** Derived purpose keys (v0.2.1). Controller = index 0 = DID address. */
+export type PurposeKeys = {
+  controller: PurposeSecpKey;
+  authentication: PurposeSecpKey;
+  assertion: PurposeSecpKey;
+  keyAgreement: PurposeKeyAgreement;
+};
+
+function bytesToBase64Url(bytes: Uint8Array): string {
+  let bin = "";
+  for (const b of bytes) bin += String.fromCharCode(b);
+  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
 
 let ready: Promise<boolean> | null = null;
 
@@ -54,13 +100,81 @@ export function ethAddressToAccountId32(address: Address): Hex {
   return `0x${body}${"ee".repeat(12)}` as Hex;
 }
 
-function evmPrivateKeyFromMnemonic(mnemonic: string): Hex {
+function evmPrivateKeyFromMnemonic(
+  mnemonic: string,
+  path: string = ETH_PATH
+): Hex {
   const seed = mnemonicToSeedSync(mnemonic);
-  const child = HDKey.fromMasterSeed(seed).derive(ETH_PATH);
+  const child = HDKey.fromMasterSeed(seed).derive(path);
   if (!child.privateKey) {
-    throw new Error("No se pudo derivar clave EVM del mnemonic");
+    throw new Error(`No se pudo derivar clave EVM del mnemonic (${path})`);
   }
   return u8aToHex(child.privateKey) as Hex;
+}
+
+function purposeSecpFromMnemonic(
+  mnemonic: string,
+  path: string,
+  fragment: string
+): PurposeSecpKey {
+  const privateKey = evmPrivateKeyFromMnemonic(mnemonic, path);
+  const account = privateKeyToAccount(privateKey);
+  return { path, privateKey, address: account.address, fragment };
+}
+
+/**
+ * Derive purpose keys from BIP39 mnemonic (hard paths, method v0.2.1).
+ * - secp256k1: BIP44 `m/44'/60'/0'/0/{0,1,2}`
+ * - keyAgreement: `{mnemonic}//did//keyAgreement//0` → Ed25519 → X25519
+ */
+export async function derivePurposeKeys(
+  mnemonic: string,
+  _network: PerantoNetwork = "hardhat"
+): Promise<PurposeKeys> {
+  await ensureCryptoReady();
+  const trimmed = mnemonic.trim().replace(/\s+/g, " ");
+  if (!mnemonicValidate(trimmed)) {
+    throw new Error("Mnemonic BIP39 inválido");
+  }
+
+  const controller = purposeSecpFromMnemonic(
+    trimmed,
+    ETH_PATH_CONTROLLER,
+    "controller"
+  );
+  const authentication = purposeSecpFromMnemonic(
+    trimmed,
+    ETH_PATH_AUTHENTICATION,
+    "key-authentication"
+  );
+  const assertion = purposeSecpFromMnemonic(
+    trimmed,
+    ETH_PATH_ASSERTION,
+    "key-assertion"
+  );
+
+  const ed = new Keyring({ type: "ed25519", ss58Format: 42 }).addFromUri(
+    `${trimmed}${KEY_AGREEMENT_URI_SUFFIX}`
+  );
+  const x25519 = edwardsToMontgomeryPub(ed.publicKey);
+  const x25519PublicKey = u8aToHex(x25519) as Hex;
+
+  return {
+    controller,
+    authentication,
+    assertion,
+    keyAgreement: {
+      uriSuffix: KEY_AGREEMENT_URI_SUFFIX,
+      ed25519PublicKey: u8aToHex(ed.publicKey) as Hex,
+      x25519PublicKey,
+      publicKeyJwk: {
+        kty: "OKP",
+        crv: "X25519",
+        x: bytesToBase64Url(x25519),
+      },
+      fragment: "key-agreement",
+    },
+  };
 }
 
 function deriveFromMnemonic(

@@ -31,21 +31,32 @@ import {
 import {
   NETWORK_CHAIN_ID,
   DID_SERVICE_DEFAULT_VALIDITY,
+  DELEGATE_TYPE_SVC,
   attributeNameFromBytes32,
   attributeNameToBytes32,
+  decodeDidPurposeVmValue,
   decodeDidServiceValue,
+  delegateTypeFromBytes32,
+  delegateTypeToBytes32,
+  encodeDidPurposeVmValue,
   encodeDidServiceValue,
   formatDid,
   isServiceAttributeName,
+  isVmAttributeName,
   parseDid,
-  resolveDidMinimal,
+  resolveDidDocument,
   schemaIdFromKey,
   serviceAttributeName,
   serviceAttrKeyFromAttributeName,
   serviceSlotFromAttributeName,
   serviceTypeFromAttributeName,
+  vmAttributeName,
+  vmRelationshipFromAttributeName,
+  type DidDelegate,
   type DidDocument,
+  type DidPurposeVm,
   type DidService,
+  type DidVmRelationship,
   type PerantoNetwork,
 } from "./did";
 import {
@@ -54,6 +65,10 @@ import {
   type EcoTestClaims,
   type IssuedCredential,
 } from "./vc";
+import {
+  derivePurposeKeys,
+  type PurposeKeys,
+} from "./wallet";
 import {
   getContractEventsChunked,
   getContractEventsChunkedDetailed,
@@ -94,6 +109,7 @@ export type CollectDidServicesOpts = {
 
 export type CollectDidServicesResult = {
   services: DidService[];
+  purposeVms: DidPurposeVm[];
   syncedToBlock: bigint;
 };
 
@@ -134,16 +150,24 @@ export class PerantoClient {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private readonly walletClient?: any;
   private readonly privateKey?: Hex;
+  /** BIP39 — used to derive assertion / purpose keys when issuing VCs. */
+  private readonly mnemonic?: string;
+  /** Optional override for JWT-VC ES256K (defaults to derived assertion or controller). */
+  private readonly assertionPrivateKey?: Hex;
 
   constructor(opts: {
     network: PerantoNetwork;
     addresses: ContractAddresses;
     rpcUrl?: string;
     privateKey?: Hex;
+    mnemonic?: string;
+    assertionPrivateKey?: Hex;
   }) {
     this.network = opts.network;
     this.addresses = opts.addresses;
     this.privateKey = opts.privateKey;
+    this.mnemonic = opts.mnemonic?.trim();
+    this.assertionPrivateKey = opts.assertionPrivateKey;
     const chain = chainFor(opts.network);
     const transport = http(opts.rpcUrl);
 
@@ -162,6 +186,52 @@ export class PerantoClient {
     }
   }
 
+  /**
+   * Hub TestNet eth-rpc often rejects EIP-1559 txs from newly funded accounts
+   * (`Invalid Transaction`). Prefer legacy `gasPrice` on paseo.
+   */
+  private async paseoFeeFields(): Promise<
+    | { type: "legacy"; gasPrice: bigint }
+    | Record<string, never>
+  > {
+    if (this.network !== "paseo") return {};
+    const gasPrice = await this.publicClient.getGasPrice();
+    return { type: "legacy", gasPrice };
+  }
+
+  private async writeContract(
+    params: Parameters<NonNullable<typeof this.walletClient>["writeContract"]>[0]
+  ) {
+    this.requireWallet();
+    const fees = await this.paseoFeeFields();
+    const base = { ...(params as object) } as Record<string, unknown>;
+    Object.assign(base, fees);
+    // Avoid huge fixed gas caps: at ~1000 gwei, oversized gas locks more PAS
+    // than a freshly funded demo wallet holds (Invalid Transaction).
+    if (this.network === "paseo" && base.gas == null) {
+      try {
+        const estimated = await this.publicClient.estimateContractGas({
+          ...(params as object),
+          account: this.walletClient!.account!,
+        } as never);
+        base.gas = (estimated * 15n) / 10n; // +50% headroom for PVM
+      } catch {
+        /* let viem estimate at send time */
+      }
+    }
+    return this.walletClient!.writeContract(base as never);
+  }
+
+  private async sendTransaction(
+    params: Parameters<NonNullable<typeof this.walletClient>["sendTransaction"]>[0]
+  ) {
+    this.requireWallet();
+    const fees = await this.paseoFeeFields();
+    const base = { ...(params as object) } as Record<string, unknown>;
+    Object.assign(base, fees);
+    return this.walletClient!.sendTransaction(base as never);
+  }
+
   get accountAddress(): Address | undefined {
     return this.walletClient?.account?.address;
   }
@@ -171,7 +241,7 @@ export class PerantoClient {
     opts?: CollectDidServicesOpts
   ): Promise<DidDocument> {
     const { address } = parseDid(did);
-    const [deactivated, collected] = await Promise.all([
+    const [deactivated, collected, delegates] = await Promise.all([
       this.publicClient.readContract({
         address: this.addresses.DIDRegistry,
         abi: didRegistryAbi,
@@ -179,17 +249,135 @@ export class PerantoClient {
         args: [address],
       }),
       this.collectDidServices(did, address, opts),
+      this.collectDidDelegates(address),
     ]);
-    return resolveDidMinimal(did, Boolean(deactivated), collected.services);
+    return resolveDidDocument(
+      did,
+      Boolean(deactivated),
+      collected.services,
+      delegates,
+      collected.purposeVms
+    );
+  }
+
+  /** Active delegates from on-chain enumerable list (method v0.2). */
+  async collectDidDelegates(identity: Address): Promise<DidDelegate[]> {
+    try {
+      const count = (await this.publicClient.readContract({
+        address: this.addresses.DIDRegistry,
+        abi: didRegistryAbi,
+        functionName: "delegateCount",
+        args: [identity],
+      })) as bigint;
+      const now = Math.floor(Date.now() / 1000);
+      const out: DidDelegate[] = [];
+      for (let i = 0n; i < count; i++) {
+        const row = (await this.publicClient.readContract({
+          address: this.addresses.DIDRegistry,
+          abi: didRegistryAbi,
+          functionName: "delegateAt",
+          args: [identity, i],
+        })) as [Hex, Address, bigint];
+        const validTo = Number(row[2]);
+        if (validTo <= now) continue;
+        out.push({
+          delegateType: delegateTypeFromBytes32(row[0]),
+          address: getAddress(row[1]),
+          validTo,
+        });
+      }
+      return out;
+    } catch {
+      // Pre-v0.2 registry without enumerable delegates
+      return [];
+    }
   }
 
   /**
-   * Rebuild active DID services from `DIDAttributeChanged` events
-   * (`did/svc/<Type>` keys). Uses a wide lookback — Paseo RPCs reject genesis queries.
-   *
-   * Pass `fromBlock` + `seedServices` for incremental sync after a prior scan.
+   * Prefer on-chain attribute storage (v0.2). Fall back to event lookback when
+   * storage is empty / unsupported (legacy registry or fresh identity).
    */
   async collectDidServices(
+    did: string,
+    identity: Address,
+    opts?: CollectDidServicesOpts
+  ): Promise<CollectDidServicesResult> {
+    const fromStorage = await this.collectDidServicesFromStorage(did, identity);
+    if (fromStorage?.supported) {
+      const latest = await this.publicClient.getBlockNumber();
+      return {
+        services: fromStorage.services,
+        purposeVms: fromStorage.purposeVms,
+        syncedToBlock: latest,
+      };
+    }
+    return this.collectDidServicesFromEvents(did, identity, opts);
+  }
+
+  private async collectDidServicesFromStorage(
+    did: string,
+    identity: Address
+  ): Promise<{
+    services: DidService[];
+    purposeVms: DidPurposeVm[];
+    supported: boolean;
+  } | null> {
+    try {
+      const count = (await this.publicClient.readContract({
+        address: this.addresses.DIDRegistry,
+        abi: didRegistryAbi,
+        functionName: "attributeCount",
+        args: [identity],
+      })) as bigint;
+      const now = Math.floor(Date.now() / 1000);
+      const out: DidService[] = [];
+      const purposeVms: DidPurposeVm[] = [];
+      for (let i = 0n; i < count; i++) {
+        const name = (await this.publicClient.readContract({
+          address: this.addresses.DIDRegistry,
+          abi: didRegistryAbi,
+          functionName: "attributeNameAt",
+          args: [identity, i],
+        })) as Hex;
+        const nameStr = attributeNameFromBytes32(name);
+        const isSvc = isServiceAttributeName(nameStr);
+        const isVm = isVmAttributeName(nameStr);
+        if (!isSvc && !isVm) continue;
+        const row = (await this.publicClient.readContract({
+          address: this.addresses.DIDRegistry,
+          abi: didRegistryAbi,
+          functionName: "getAttribute",
+          args: [identity, name],
+        })) as [Hex, bigint, boolean];
+        const [value, validTo, active] = row;
+        if (!active || Number(validTo) <= now) continue;
+        if (isSvc) {
+          const type = serviceTypeFromAttributeName(nameStr);
+          const attrKey = serviceAttrKeyFromAttributeName(nameStr);
+          const svc = decodeDidServiceValue(value, type, did);
+          if (svc) {
+            const slot = serviceSlotFromAttributeName(nameStr);
+            out.push({
+              ...svc,
+              attrKey,
+              name: svc.name?.trim() || slot || undefined,
+            });
+          }
+        } else {
+          const rel = vmRelationshipFromAttributeName(nameStr);
+          if (!rel) continue;
+          const vm = decodeDidPurposeVmValue(value, rel, did);
+          if (vm) purposeVms.push(vm);
+        }
+      }
+      return { services: out, purposeVms, supported: true };
+    } catch {
+      return null;
+    }
+  }
+
+  /** Rebuild services from `DIDAttributeChanged` events (legacy / fallback). */
+  async collectDidServicesFromEvents(
     did: string,
     identity: Address,
     opts?: CollectDidServicesOpts
@@ -202,7 +390,6 @@ export class PerantoClient {
         abi: didRegistryAbi,
         eventName: "DIDAttributeChanged",
         args: { identity },
-        // ~30d @ 6s/block — short windows make older linktr33 services “vanish”
         lookback: opts?.lookback ?? (cold ? 500_000n : undefined),
         chunkSize: opts?.chunkSize ?? 4_000n,
         fromBlock: opts?.fromBlock,
@@ -211,7 +398,6 @@ export class PerantoClient {
       }
     );
 
-    // Sort so later blocks overwrite earlier ones when merging into a seed map
     const ordered = [...logs].sort((a, b) => {
       const ba = a.blockNumber ?? 0n;
       const bb = b.blockNumber ?? 0n;
@@ -228,7 +414,6 @@ export class PerantoClient {
       for (const s of opts.seedServices) {
         if (!s.attrKey) continue;
         const nameStr = `did/svc/${s.attrKey}`;
-        // Seed as still-valid; real clears arrive via new logs
         const payload = encodeDidServiceValue({
           id: s.id,
           type: s.type,
@@ -249,7 +434,7 @@ export class PerantoClient {
         continue;
       }
       const nameStr = attributeNameFromBytes32(args.name);
-      if (!isServiceAttributeName(nameStr)) continue;
+      if (!isServiceAttributeName(nameStr) && !isVmAttributeName(nameStr)) continue;
       latest.set(nameStr, {
         value: args.value,
         validTo: Number(args.validTo),
@@ -257,39 +442,125 @@ export class PerantoClient {
     }
 
     const out: DidService[] = [];
+    const purposeVms: DidPurposeVm[] = [];
     for (const [nameStr, entry] of latest) {
       if (entry.validTo <= now) continue;
-      const type = serviceTypeFromAttributeName(nameStr);
-      const attrKey = serviceAttrKeyFromAttributeName(nameStr);
-      const svc = decodeDidServiceValue(entry.value, type, did);
-      if (svc) {
-        const slot = serviceSlotFromAttributeName(nameStr);
-        out.push({
-          ...svc,
-          attrKey,
-          name: svc.name?.trim() || slot || undefined,
-        });
+      if (isServiceAttributeName(nameStr)) {
+        const type = serviceTypeFromAttributeName(nameStr);
+        const attrKey = serviceAttrKeyFromAttributeName(nameStr);
+        const svc = decodeDidServiceValue(entry.value, type, did);
+        if (svc) {
+          const slot = serviceSlotFromAttributeName(nameStr);
+          out.push({
+            ...svc,
+            attrKey,
+            name: svc.name?.trim() || slot || undefined,
+          });
+        }
+      } else {
+        const rel = vmRelationshipFromAttributeName(nameStr);
+        if (!rel) continue;
+        const vm = decodeDidPurposeVmValue(entry.value, rel, did);
+        if (vm) purposeVms.push(vm);
       }
     }
-    return { services: out, syncedToBlock: toBlock };
+    return { services: out, purposeVms, syncedToBlock: toBlock };
   }
 
+  async addDelegate(opts: {
+    identity?: Address;
+    delegateType: string;
+    delegate: Address;
+    validitySeconds: bigint;
+  }) {
+    this.requireWallet();
+    const identity = opts.identity ?? this.accountAddress!;
+    const hash = await this.writeContract({
+      address: this.addresses.DIDRegistry,
+      abi: didRegistryAbi,
+      functionName: "addDelegate",
+      args: [
+        identity,
+        delegateTypeToBytes32(opts.delegateType),
+        opts.delegate,
+        opts.validitySeconds,
+      ],
+      chain: chainFor(this.network),
+      account: this.walletClient!.account!,
+    });
+    await this.publicClient.waitForTransactionReceipt({ hash });
+    return hash;
+  }
+
+  async revokeDelegate(opts: {
+    identity?: Address;
+    delegateType: string;
+    delegate: Address;
+  }) {
+    this.requireWallet();
+    const identity = opts.identity ?? this.accountAddress!;
+    const hash = await this.writeContract({
+      address: this.addresses.DIDRegistry,
+      abi: didRegistryAbi,
+      functionName: "revokeDelegate",
+      args: [
+        identity,
+        delegateTypeToBytes32(opts.delegateType),
+        opts.delegate,
+      ],
+      chain: chainFor(this.network),
+      account: this.walletClient!.account!,
+    });
+    await this.publicClient.waitForTransactionReceipt({ hash });
+    return hash;
+  }
+
+  async validDelegate(
+    identity: Address,
+    delegateType: string,
+    delegate: Address
+  ): Promise<boolean> {
+    return (await this.publicClient.readContract({
+      address: this.addresses.DIDRegistry,
+      abi: didRegistryAbi,
+      functionName: "validDelegate",
+      args: [identity, delegateTypeToBytes32(delegateType), delegate],
+    })) as boolean;
+  }
+
+  /** Convenience: grant `svc` scope so `delegate` can update did/svc/* attributes. */
+  async addServiceDelegate(
+    delegate: Address,
+    validitySeconds: bigint = DID_SERVICE_DEFAULT_VALIDITY
+  ) {
+    return this.addDelegate({
+      delegateType: DELEGATE_TYPE_SVC,
+      delegate,
+      validitySeconds,
+    });
+  }
+
+  /**
+   * Set a DID attribute. Defaults to the session account as `identity`.
+   * A valid `svc` delegate may pass the controller identity to update `did/svc/*`.
+   */
   async setDidAttribute(
     name: string | Hex,
     value: Hex,
-    validitySeconds: bigint = DID_SERVICE_DEFAULT_VALIDITY
+    validitySeconds: bigint = DID_SERVICE_DEFAULT_VALIDITY,
+    identity?: Address
   ) {
     this.requireWallet();
-    const identity = this.accountAddress!;
+    const id = identity ?? this.accountAddress!;
     const nameBytes =
       typeof name === "string" && !name.startsWith("0x")
         ? attributeNameToBytes32(name)
         : (name as Hex);
-    const hash = await this.walletClient!.writeContract({
+    const hash = await this.writeContract({
       address: this.addresses.DIDRegistry,
       abi: didRegistryAbi,
       functionName: "setAttribute",
-      args: [identity, nameBytes, value, validitySeconds],
+      args: [id, nameBytes, value, validitySeconds],
       chain: chainFor(this.network),
       account: this.walletClient!.account!,
     });
@@ -307,8 +578,14 @@ export class PerantoClient {
     /** Display label on public page (defaults to key/slot). */
     name?: string;
     validitySeconds?: bigint;
+    /**
+     * Target identity (default: session account).
+     * Required when a `svc` delegate updates another DID's services.
+     */
+    identity?: Address;
   }) {
-    const did = formatDid(this.network, this.accountAddress!);
+    const target = opts.identity ?? this.accountAddress!;
+    const did = formatDid(this.network, target);
     const attrKey = opts.key?.trim()
       ? `${opts.type.trim()}.${opts.key.trim()}`
       : opts.type.trim();
@@ -323,7 +600,8 @@ export class PerantoClient {
     return this.setDidAttribute(
       serviceAttributeName(opts.type, opts.key),
       payload,
-      opts.validitySeconds ?? DID_SERVICE_DEFAULT_VALIDITY
+      opts.validitySeconds ?? DID_SERVICE_DEFAULT_VALIDITY,
+      target
     );
   }
 
@@ -339,10 +617,86 @@ export class PerantoClient {
     return this.clearDidService(attrKey.slice(0, dot), attrKey.slice(dot + 1));
   }
 
+  /**
+   * Publish purpose verification methods (`did/vm/*`) from derived keys.
+   * Owner-only; three sequential `setAttribute` txs (auth, assertion, keyAgreement).
+   */
+  async publishPurposeKeys(
+    keys: PurposeKeys,
+    validitySeconds: bigint = DID_SERVICE_DEFAULT_VALIDITY
+  ): Promise<{ hashes: Hex[]; did: string }> {
+    this.requireWallet();
+    const did = formatDid(this.network, this.accountAddress!);
+    const chainId = NETWORK_CHAIN_ID[this.network];
+    const hashes: Hex[] = [];
+
+    const authPayload = encodeDidPurposeVmValue({
+      id: `${did}#${keys.authentication.fragment}`,
+      type: "EcdsaSecp256k1RecoveryMethod2020",
+      blockchainAccountId: `eip155:${chainId}:${keys.authentication.address}`,
+    });
+    hashes.push(
+      await this.setDidAttribute(
+        vmAttributeName("authentication"),
+        authPayload,
+        validitySeconds
+      )
+    );
+
+    const assertPayload = encodeDidPurposeVmValue({
+      id: `${did}#${keys.assertion.fragment}`,
+      type: "EcdsaSecp256k1RecoveryMethod2020",
+      blockchainAccountId: `eip155:${chainId}:${keys.assertion.address}`,
+    });
+    hashes.push(
+      await this.setDidAttribute(
+        vmAttributeName("assertionMethod"),
+        assertPayload,
+        validitySeconds
+      )
+    );
+
+    const kaPayload = encodeDidPurposeVmValue({
+      id: `${did}#${keys.keyAgreement.fragment}`,
+      type: "X25519KeyAgreementKey2020",
+      publicKeyJwk: keys.keyAgreement.publicKeyJwk,
+    });
+    hashes.push(
+      await this.setDidAttribute(
+        vmAttributeName("keyAgreement"),
+        kaPayload,
+        validitySeconds
+      )
+    );
+
+    return { hashes, did };
+  }
+
+  /** Derive purpose keys from mnemonic and publish on-chain. */
+  async publishPurposeKeysFromMnemonic(
+    mnemonic: string,
+    validitySeconds?: bigint
+  ) {
+    const keys = await derivePurposeKeys(mnemonic, this.network);
+    if (
+      keys.controller.address.toLowerCase() !==
+      this.accountAddress!.toLowerCase()
+    ) {
+      throw new Error(
+        "Mnemonic no corresponde al controller de la sesión (path m/44'/60'/0'/0/0)"
+      );
+    }
+    return this.publishPurposeKeys(keys, validitySeconds);
+  }
+
+  async clearPurposeVm(relationship: DidVmRelationship) {
+    return this.setDidAttribute(vmAttributeName(relationship), "0x", 0n);
+  }
+
   async deactivateDid(identity?: Address) {
     this.requireWallet();
     const id = identity ?? this.accountAddress!;
-    const hash = await this.walletClient!.writeContract({
+    const hash = await this.writeContract({
       address: this.addresses.DIDRegistry,
       abi: didRegistryAbi,
       functionName: "deactivate",
@@ -359,7 +713,7 @@ export class PerantoClient {
     if (!this.addresses.NameRegistry) {
       throw new Error("NameRegistry not in deployment");
     }
-    const hash = await this.walletClient!.writeContract({
+    const hash = await this.writeContract({
       address: this.addresses.NameRegistry,
       abi: nameRegistryAbi,
       functionName: "release",
@@ -375,7 +729,7 @@ export class PerantoClient {
     this.requireWallet();
     const schemaId = schemaIdFromKey(schemaKey);
     const schemaHash = schemaIdFromKey(schemaBody);
-    const hash = await this.walletClient!.writeContract({
+    const hash = await this.writeContract({
       address: this.addresses.SchemaRegistry,
       abi: schemaRegistryAbi,
       functionName: "registerSchema",
@@ -397,7 +751,7 @@ export class PerantoClient {
         abi: attesterRegistryAbi,
         functionName: "minStake",
       }));
-    const hash = await this.walletClient!.writeContract({
+    const hash = await this.writeContract({
       address: this.addresses.AttesterRegistry,
       abi: attesterRegistryAbi,
       functionName: "stakeAndJoin",
@@ -440,8 +794,38 @@ export class PerantoClient {
     credentialType?: string
   ): Promise<IssuedCredential & { anchorTx: Hex }> {
     this.requireWallet();
+    const controller = this.accountAddress!;
+    let signingKey = this.privateKey!;
+    let kid: string | undefined;
+    let issuerDidAddress: Address | undefined;
+
+    if (this.assertionPrivateKey) {
+      signingKey = this.assertionPrivateKey;
+      issuerDidAddress = controller;
+      kid = `${formatDid(this.network, controller)}#key-assertion`;
+    } else if (this.mnemonic) {
+      try {
+        const doc = await this.resolveDid(
+          formatDid(this.network, controller)
+        );
+        const hasAssertVm = doc.assertionMethod.some((id) =>
+          id.includes("#key-assertion")
+        );
+        if (hasAssertVm) {
+          const keys = await derivePurposeKeys(this.mnemonic, this.network);
+          signingKey = keys.assertion.privateKey;
+          issuerDidAddress = controller;
+          kid = `${formatDid(this.network, controller)}#key-assertion`;
+        }
+      } catch {
+        /* fallback controller */
+      }
+    }
+
     const issued = await issueJwtCredential({
-      issuerPrivateKey: this.privateKey!,
+      issuerPrivateKey: signingKey,
+      issuerDidAddress,
+      kid,
       network: this.network,
       subjectAddress: subject,
       claims,
@@ -459,7 +843,7 @@ export class PerantoClient {
       functionName: "anchorFee",
     });
 
-    const hash = await this.walletClient!.writeContract({
+    const hash = await this.writeContract({
       address: this.addresses.CredentialStatusRegistry,
       abi: credentialStatusAbi,
       functionName: "anchor",
@@ -486,7 +870,25 @@ export class PerantoClient {
       revokeReason: string;
     };
   }> {
-    const details = await verifyEcoTestJwt(jwt);
+    let details = await verifyEcoTestJwt(jwt);
+    if (!details.valid && details.issuerDid) {
+      try {
+        const doc = await this.resolveDid(details.issuerDid);
+        const allowed: Address[] = [];
+        for (const vmId of doc.assertionMethod) {
+          const vm = doc.verificationMethod.find((v) => v.id === vmId);
+          const m = vm?.blockchainAccountId
+            ? /eip155:\d+:(0x[a-fA-F0-9]{40})/.exec(vm.blockchainAccountId)
+            : null;
+          if (m?.[1]) allowed.push(getAddress(m[1] as Address));
+        }
+        if (allowed.length) {
+          details = await verifyEcoTestJwt(jwt, undefined, allowed);
+        }
+      } catch {
+        /* keep first failure */
+      }
+    }
     if (!details.valid) {
       return {
         jwtValid: false,
@@ -537,7 +939,7 @@ export class PerantoClient {
 
   async revoke(credHash: Hex, reason: string) {
     this.requireWallet();
-    const hash = await this.walletClient!.writeContract({
+    const hash = await this.writeContract({
       address: this.addresses.CredentialStatusRegistry,
       abi: credentialStatusAbi,
       functionName: "revoke",
@@ -559,7 +961,7 @@ export class PerantoClient {
       abi: nameRegistryAbi,
       functionName: "registrationFee",
     });
-    const hash = await this.walletClient!.writeContract({
+    const hash = await this.writeContract({
       address: this.addresses.NameRegistry,
       abi: nameRegistryAbi,
       functionName: "register",
@@ -679,7 +1081,7 @@ export class PerantoClient {
 
     const tryAtomic = async () => {
       if (floor !== undefined) {
-        return this.walletClient!.writeContract({
+        return this.writeContract({
           address: factory,
           abi: disCOFactoryAbi,
           functionName: "createNodeWithConfig",
@@ -689,7 +1091,7 @@ export class PerantoClient {
           account: this.walletClient!.account!,
         });
       }
-      return this.walletClient!.writeContract({
+      return this.writeContract({
       address: factory,
       abi: disCOFactoryAbi,
       functionName: "createNode",
@@ -706,7 +1108,7 @@ export class PerantoClient {
     } catch (err) {
       // Factory antiguo (Paseo): createNode no payable / sin WithConfig → create + fund.
       if (seed === 0n && floor === undefined) throw err;
-      hash = await this.walletClient!.writeContract({
+      hash = await this.writeContract({
         address: factory,
           abi: disCOFactoryAbi,
         functionName: "createNode",
@@ -723,7 +1125,7 @@ export class PerantoClient {
 
     let fundTx: Hex | undefined;
     if (seed > 0n && !usedAtomicSeed) {
-      fundTx = await this.walletClient!.sendTransaction({
+      fundTx = await this.sendTransaction({
         to: node,
         value: seed,
         chain: chainFor(this.network),
@@ -734,7 +1136,7 @@ export class PerantoClient {
 
     if (floor !== undefined && !usedAtomicSeed) {
       // Creator is governance of the node — set floor post-create on legacy factory.
-      const floorTx = await this.walletClient!.writeContract({
+      const floorTx = await this.writeContract({
         address: node,
         abi: disCONodeAbi,
         functionName: "setReserveFloor",
@@ -761,7 +1163,7 @@ export class PerantoClient {
     if (from.toLowerCase() === to.toLowerCase()) {
       throw new Error("No puedes tiparte a ti mismo (Care/Love requieren otro peer)");
     }
-    const hash = await this.walletClient!.writeContract({
+    const hash = await this.writeContract({
       address: node,
       abi: disCONodeAbi,
       functionName: "tip",
@@ -776,7 +1178,7 @@ export class PerantoClient {
 
   async contribute(node: Address, valueWei: bigint) {
     this.requireWallet();
-    const hash = await this.walletClient!.writeContract({
+    const hash = await this.writeContract({
       address: node,
       abi: disCONodeAbi,
       functionName: "contribute",
@@ -791,7 +1193,7 @@ export class PerantoClient {
 
   async harvest(node: Address, periodId: bigint) {
     this.requireWallet();
-    const hash = await this.walletClient!.writeContract({
+    const hash = await this.writeContract({
       address: node,
       abi: disCONodeAbi,
       functionName: "harvest",
@@ -806,7 +1208,7 @@ export class PerantoClient {
   async distribute(periodId: bigint) {
     this.requireWallet();
     const treasury = this.requireTreasury();
-    const hash = await this.walletClient!.writeContract({
+    const hash = await this.writeContract({
       address: treasury,
       abi: protocolTreasuryAbi,
       functionName: "distribute",
@@ -820,7 +1222,7 @@ export class PerantoClient {
 
   async addMember(node: Address, account: Address) {
     this.requireWallet();
-    const hash = await this.walletClient!.writeContract({
+    const hash = await this.writeContract({
       address: node,
       abi: disCONodeAbi,
       functionName: "addMember",
@@ -834,7 +1236,7 @@ export class PerantoClient {
 
   async removeMember(node: Address, account: Address) {
     this.requireWallet();
-    const hash = await this.walletClient!.writeContract({
+    const hash = await this.writeContract({
       address: node,
       abi: disCONodeAbi,
       functionName: "removeMember",
@@ -848,7 +1250,7 @@ export class PerantoClient {
 
   async withdrawNode(node: Address, to: Address, amountWei: bigint) {
     this.requireWallet();
-    const hash = await this.walletClient!.writeContract({
+    const hash = await this.writeContract({
       address: node,
       abi: disCONodeAbi,
       functionName: "withdraw",
@@ -872,7 +1274,7 @@ export class PerantoClient {
   ) {
     this.requireWallet();
     const to = residualTo ?? this.accountAddress!;
-    const hash = await this.walletClient!.writeContract({
+    const hash = await this.writeContract({
       address: node,
       abi: disCONodeAbi,
       functionName: "dissolve",
@@ -893,7 +1295,7 @@ export class PerantoClient {
 
   async recordNodeAnchor(node: Address, credHash: Hex) {
     this.requireWallet();
-    const hash = await this.walletClient!.writeContract({
+    const hash = await this.writeContract({
       address: node,
       abi: disCONodeAbi,
       functionName: "recordAnchor",

@@ -1,15 +1,16 @@
 # Camino a compliance W3C + DIF (did:peranto)
 
-Spec del método: [did-peranto-method.md](./did-peranto-method.md) **v0.1**.  
+Spec del método: [did-peranto-method.md](./did-peranto-method.md) **v0.2**.  
 Driver: `packages/uni-resolver-driver-did-peranto`.  
 Borradores de PR externos: [external-prs-draft.md](./external-prs-draft.md).
 
-## Qué ya cubre la spec v0.1
+## Qué ya cubre la spec v0.2
 
 - Sintaxis ABNF + redes canónicas  
-- Document mínimo + enrichment on-chain  
+- Document mínimo + enrichment on-chain (**storage** de attrs + delegates → VMs)  
 - Create / Resolve / Update / Deactivate  
-- Addresses de referencia en Paseo  
+- Scopes `svc` / `sigAuth` / `veriKey`  
+- Addresses de referencia en Paseo (tras redeploy)  
 
 Eso es **compliance de método DID Core** a nivel especificación + implementación de referencia (SDK).
 

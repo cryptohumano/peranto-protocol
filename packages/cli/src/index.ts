@@ -7,7 +7,7 @@ import {
   formatDid,
   loadDeployment,
   parseEther,
-  resolveDidMinimal,
+  resolveDidDocument,
   type PerantoNetwork,
 } from "@peranto/sdk";
 import type { Address, Hex } from "viem";
@@ -18,6 +18,8 @@ function usage(): never {
 Usage:
   peranto did create [--network hardhat|paseo|base|baseSepolia|arbitrum|arbitrumSepolia]
   peranto did resolve <did>
+  peranto did delegate add <address> [--type svc|sigAuth|veriKey] [--days 365] --private-key <hex>
+  peranto did delegate revoke <address> [--type svc|sigAuth|veriKey] --private-key <hex>
   peranto schema register <schemaKey> <uri> --private-key <hex> [--rpc url]
   peranto attester join <schemaKey> --private-key <hex> [--stake wei]
   peranto vc issue --private-key <hex> --subject <address> --sample <id> --type <t> --result <r> --unit <u> --lab <name>
@@ -32,6 +34,7 @@ Usage:
   peranto disco distribute <periodId> --private-key <hex>
   peranto disco scores <node> <account>
   peranto disco member add <node> <account> --private-key <hex>
+  peranto disco dissolve <node> [--to 0x…] --private-key <hex>
 
 Env:
   PERANTO_NETWORK=hardhat|paseo|base|baseSepolia|arbitrum|arbitrumSepolia
@@ -146,9 +149,36 @@ async function main() {
       const doc = await c.resolveDid(did!);
       console.log(JSON.stringify(doc, null, 2));
     } catch {
-      console.log(JSON.stringify(resolveDidMinimal(did!), null, 2));
+      console.log(JSON.stringify(resolveDidDocument(did!), null, 2));
     }
     return;
+  }
+
+  if (cmd === "did" && sub === "delegate") {
+    const action = rest[0];
+    const delegate = rest[1] as Address;
+    const dtype = arg("--type", argv) || "svc";
+    if (!action || !delegate) usage();
+    const c = client(argv, true);
+    if (action === "add") {
+      const days = BigInt(arg("--days", argv) || "365");
+      const tx = await c.addDelegate({
+        delegateType: dtype,
+        delegate,
+        validitySeconds: days * 24n * 60n * 60n,
+      });
+      console.log(JSON.stringify({ tx, action, delegateType: dtype, delegate }, null, 2));
+      return;
+    }
+    if (action === "revoke") {
+      const tx = await c.revokeDelegate({
+        delegateType: dtype,
+        delegate,
+      });
+      console.log(JSON.stringify({ tx, action, delegateType: dtype, delegate }, null, 2));
+      return;
+    }
+    usage();
   }
 
   if (cmd === "schema" && sub === "register") {
@@ -350,6 +380,16 @@ async function main() {
         2
       )
     );
+    return;
+  }
+
+  if (cmd === "disco" && sub === "dissolve") {
+    const node = rest[0] as Address;
+    if (!node) usage();
+    const to = arg("--to", argv) as Address | undefined;
+    const c = client(argv, true);
+    const res = await c.dissolveNode(node, to);
+    console.log(JSON.stringify(res, null, 2));
     return;
   }
 

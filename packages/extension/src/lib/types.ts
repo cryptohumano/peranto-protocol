@@ -57,15 +57,15 @@ export const DEFAULT_HARDHAT_ADDRESSES: ContractAddresses = {
 
 /** Bundled Paseo Hub TestNet deploy (keep in sync with deployments/420420417.json). */
 export const DEFAULT_PASEO_ADDRESSES: ContractAddresses = {
-  ProtocolTreasury: "0x9c675988Da8E1767618325f9828461920DA796c4",
-  DisCOFactory: "0x90a6Fad1ee4bc633316DB1afF39537268D5A52f1",
-  PerantoNode: "0x028A287dB4E63198dFa46F7c63a50aceFE4bE50e",
-  EcosystemLabNode: "0xF2C0395933EbD381d8F6dCdb6211deb729f28dCD",
-  DIDRegistry: "0xC4152D37015255C54BbBaEF9c2797dE634946B18",
-  SchemaRegistry: "0x273644C4231F31EB0237B8d55eF81Be47063D012",
-  AttesterRegistry: "0x17E4ACfc4c850f9947babccE6Df5Da828BC5b6aC",
-  CredentialStatusRegistry: "0x1E24ab96972Aa962FADCaab48803a1d759e4067a",
-  NameRegistry: "0x6834acE72E89b26eA21EcB514BA3b24a8C1D7EC3",
+  ProtocolTreasury: "0x28d5eABFd6059EEacb3403ab87b19231C98a10cd",
+  DisCOFactory: "0xf9Ce67d606cf4416e9FDFdA6EA7579888402B72C",
+  PerantoNode: "0x6DF1F4B42C033762C91FB467a5C059A940b13788",
+  EcosystemLabNode: "0x5085113140A5b99ED837eDdc4E8fdF48C131B034",
+  DIDRegistry: "0x487183414D0eF7C20c57b18c391567D5D3473124",
+  SchemaRegistry: "0xC73c1F9773291Aa03Aac89B74BD388BcCD1E682E",
+  AttesterRegistry: "0xeA4fCB68bCa0FF44c96799054bb7b551067B5D7e",
+  CredentialStatusRegistry: "0xC44ECE9509B4f7804520AF5bef4450CCd80e62EA",
+  NameRegistry: "0x42eb2Fe585c7A4cD803a2F1A3ccF3869F3bf68da",
 };
 
 export function defaultSettings(network: PerantoNetwork = "paseo"): AuraSettings {

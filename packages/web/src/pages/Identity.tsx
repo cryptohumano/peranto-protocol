@@ -26,6 +26,9 @@ import {
   portalResolveIdentityRef,
   portalSetDidService,
   portalClearDidService,
+  portalAddDidDelegate,
+  portalRevokeDidDelegate,
+  portalPublishPurposeKeys,
   saveJwtToVault,
   vault,
 } from "@/lib/client";
@@ -34,8 +37,15 @@ import { shortAddr, cn } from "@/lib/utils";
 import { FieldHint, HelpCallout } from "@/components/HelpCallout";
 import { VaultCredentialCard } from "@/components/VaultCredentialCard";
 import { upsertAddressBookEntry } from "@/lib/address-book";
-import type { DidDocument, DidService, VaultCredential } from "@peranto/sdk";
-import type { Address, Hex } from "viem";
+import {
+  DELEGATE_TYPE_SVC,
+  DELEGATE_TYPE_SIG_AUTH,
+  DELEGATE_TYPE_VERI_KEY,
+  type DidDocument,
+  type DidService,
+  type VaultCredential,
+} from "@peranto/sdk";
+import { isAddress, type Address, type Hex } from "viem";
 
 const STATUS = ["None", "Active", "Revoked"];
 const SVC_PRESETS = [
@@ -43,6 +53,24 @@ const SVC_PRESETS = [
   { type: "CredentialInbox", hint: "Dónde recibir solicitudes de VC" },
   { type: "AuraInbox", hint: "Canal Aura / mensajería" },
   { type: "Website", hint: "Página del proyecto" },
+] as const;
+
+const DELEGATE_TYPES = [
+  {
+    id: DELEGATE_TYPE_SVC,
+    label: "svc",
+    hint: "Puede actualizar did/svc/* (capabilityInvocation)",
+  },
+  {
+    id: DELEGATE_TYPE_SIG_AUTH,
+    label: "sigAuth",
+    hint: "Aparece en authentication del Document",
+  },
+  {
+    id: DELEGATE_TYPE_VERI_KEY,
+    label: "veriKey",
+    hint: "Aparece en assertionMethod del Document",
+  },
 ] as const;
 
 export function IdentityPage() {
@@ -60,6 +88,9 @@ export function IdentityPage() {
   const [svcType, setSvcType] = useState("LinkedDomains");
   const [svcKey, setSvcKey] = useState("");
   const [svcEndpoint, setSvcEndpoint] = useState("");
+  const [delegateAddr, setDelegateAddr] = useState("");
+  const [delegateType, setDelegateType] = useState<string>(DELEGATE_TYPE_SVC);
+  const [delegateDays, setDelegateDays] = useState("365");
   const [didDoc, setDidDoc] = useState<DidDocument | null>(null);
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
@@ -624,6 +655,188 @@ export function IdentityPage() {
                 atributos. Si falta un servicio aquí pero sigue en /page, suele
                 ser lookback RPC incompleto — no una tx fantasma.
               </FieldHint>
+            </Card>
+
+            <Card>
+              <CardTitle>Claves de propósito (DID v0.2.1)</CardTitle>
+              <CardDesc>
+                Deriva authentication / assertion / keyAgreement del mnemonic y
+                las publica on-chain como{" "}
+                <code className="text-[10px]">did/vm/*</code>. El controller
+                (index 0) sigue pagando gas.
+              </CardDesc>
+              <FieldHint className="mt-2">
+                Paths:{" "}
+                <code className="text-[10px]">m/44&apos;/60&apos;/0&apos;/0/1</code>{" "}
+                auth ·{" "}
+                <code className="text-[10px]">…/2</code> assertion · URI{" "}
+                <code className="text-[10px]">//did//keyAgreement//0</code> →
+                X25519. Requiere mnemonic BIP39.
+              </FieldHint>
+              <Button
+                className="mt-3"
+                disabled={busy || !session.mnemonic}
+                onClick={() =>
+                  run(async () => {
+                    const res = await portalPublishPurposeKeys(session);
+                    setMsg(
+                      `Claves publicadas (${res.hashes?.length ?? 3} txs)`
+                    );
+                    const doc = await portalResolveDid(session.did);
+                    setDidDoc(doc);
+                    setServices(doc.service ?? []);
+                  })
+                }
+              >
+                Publicar claves de propósito
+              </Button>
+              {!session.mnemonic && (
+                <FieldHint className="mt-2">
+                  Sesión solo-EVM: importa mnemonic HD para derivar purpose keys.
+                </FieldHint>
+              )}
+              <ul className="mt-3 space-y-1 text-[11px] text-muted-foreground">
+                {(didDoc?.verificationMethod ?? [])
+                  .filter(
+                    (vm) =>
+                      vm.id.includes("#key-authentication") ||
+                      vm.id.includes("#key-assertion") ||
+                      vm.id.includes("#key-agreement")
+                  )
+                  .map((vm) => (
+                    <li key={vm.id} className="font-mono truncate">
+                      {vm.id.split("#")[1]} · {vm.type}
+                    </li>
+                  ))}
+              </ul>
+            </Card>
+
+            <Card>
+              <CardTitle>Delegados (DID v0.2)</CardTitle>
+              <CardDesc>
+                Scopes: <code className="text-[10px]">svc</code> puede escribir
+                servicios; <code className="text-[10px]">sigAuth</code> /{" "}
+                <code className="text-[10px]">veriKey</code> enriquecen el
+                Document.
+              </CardDesc>
+              <Label className="mt-3">Tipo</Label>
+              <div className="mt-2 flex flex-wrap gap-1">
+                {DELEGATE_TYPES.map((t) => (
+                  <Button
+                    key={t.id}
+                    size="sm"
+                    variant={delegateType === t.id ? "default" : "secondary"}
+                    onClick={() => setDelegateType(t.id)}
+                  >
+                    {t.label}
+                  </Button>
+                ))}
+              </div>
+              <FieldHint className="mt-2">
+                {DELEGATE_TYPES.find((t) => t.id === delegateType)?.hint}
+              </FieldHint>
+              <Label className="mt-2">Address del delegado</Label>
+              <Input
+                value={delegateAddr}
+                onChange={(e) => setDelegateAddr(e.target.value)}
+                placeholder="0x…"
+              />
+              <Label className="mt-2">Validez (días)</Label>
+              <Input
+                value={delegateDays}
+                onChange={(e) => setDelegateDays(e.target.value)}
+                placeholder="365"
+              />
+              <Button
+                className="mt-3"
+                disabled={busy || !isAddress(delegateAddr.trim())}
+                onClick={() =>
+                  run(async () => {
+                    const days = Math.max(1, Number(delegateDays) || 365);
+                    const validity = BigInt(days) * 24n * 60n * 60n;
+                    await portalAddDidDelegate(
+                      delegateType,
+                      delegateAddr.trim() as Address,
+                      validity,
+                      session
+                    );
+                    setMsg(`Delegado ${delegateType} añadido`);
+                    setDelegateAddr("");
+                    const doc = await portalResolveDid(session.did);
+                    setDidDoc(doc);
+                    setServices(doc.service ?? []);
+                  })
+                }
+              >
+                Añadir delegado
+              </Button>
+              <ul className="mt-3 space-y-2">
+                {(didDoc?.verificationMethod ?? [])
+                  .filter((vm) => vm.id.includes("#delegate-"))
+                  .map((vm) => {
+                    const rels: string[] = [];
+                    if (didDoc?.authentication?.includes(vm.id))
+                      rels.push("authentication");
+                    if (didDoc?.assertionMethod?.includes(vm.id))
+                      rels.push("assertionMethod");
+                    if (didDoc?.capabilityInvocation?.includes(vm.id))
+                      rels.push("capabilityInvocation");
+                    const addrMatch = /eip155:\d+:(0x[a-fA-F0-9]{40})/.exec(
+                      vm.blockchainAccountId
+                    );
+                    const addr = addrMatch?.[1] as Address | undefined;
+                    const typeFrag = vm.id.includes("sigAuth")
+                      ? DELEGATE_TYPE_SIG_AUTH
+                      : vm.id.includes("veriKey")
+                        ? DELEGATE_TYPE_VERI_KEY
+                        : DELEGATE_TYPE_SVC;
+                    return (
+                      <li
+                        key={vm.id}
+                        className="flex items-start justify-between gap-2 rounded-xl border border-[var(--color-moss)]/12 px-3 py-2 text-sm"
+                      >
+                        <div className="min-w-0">
+                          <p className="font-semibold">{typeFrag}</p>
+                          <p className="truncate font-mono text-[10px] text-muted-foreground">
+                            {addr ?? vm.blockchainAccountId}
+                          </p>
+                          <p className="text-[10px] text-muted-foreground">
+                            {rels.join(" · ") || "VM"}
+                          </p>
+                        </div>
+                        {addr && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            disabled={busy}
+                            onClick={() =>
+                              run(async () => {
+                                await portalRevokeDidDelegate(
+                                  typeFrag,
+                                  addr,
+                                  session
+                                );
+                                setMsg("Delegado revocado");
+                                const doc = await portalResolveDid(session.did);
+                                setDidDoc(doc);
+                                setServices(doc.service ?? []);
+                              })
+                            }
+                          >
+                            Revocar
+                          </Button>
+                        )}
+                      </li>
+                    );
+                  })}
+                {(didDoc?.verificationMethod ?? []).filter((vm) =>
+                  vm.id.includes("#delegate-")
+                ).length === 0 && (
+                  <p className="text-sm text-muted-foreground">
+                    Ningún delegado activo en el Document.
+                  </p>
+                )}
+              </ul>
             </Card>
             {didDoc && (
               <Card>

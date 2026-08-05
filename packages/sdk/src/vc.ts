@@ -66,9 +66,11 @@ function utf8ToBase64Url(obj: unknown): string {
  */
 function signEs256kJwt(
   privateKey: Hex,
-  payload: Record<string, unknown>
+  payload: Record<string, unknown>,
+  kid?: string
 ): string {
-  const header = { alg: "ES256K", typ: "JWT" };
+  const header: Record<string, string> = { alg: "ES256K", typ: "JWT" };
+  if (kid) header.kid = kid;
   const h = utf8ToBase64Url(header);
   const p = utf8ToBase64Url(payload);
   const signingInput = new TextEncoder().encode(`${h}.${p}`);
@@ -113,6 +115,13 @@ export async function issueJwtCredential(params: {
   claims: Record<string, unknown>;
   schemaKey: string;
   credentialType?: string;
+  /**
+   * Controller DID address when signing with a purpose assertion key
+   * (iss = controller DID; kid = #key-assertion).
+   */
+  issuerDidAddress?: Address;
+  /** JWT `kid` (e.g. `did:…#key-assertion`). */
+  kid?: string;
   credentialStatus?: {
     contractAddress: Address;
     chainId: number;
@@ -122,8 +131,9 @@ export async function issueJwtCredential(params: {
   const typeName =
     params.credentialType ??
     (schemaKey.includes(":") ? schemaKey.split(":")[1]! : "Credential");
-  const issuer = privateKeyToAccount(params.issuerPrivateKey);
-  const issuerDid = formatDid(params.network, issuer.address);
+  const signer = privateKeyToAccount(params.issuerPrivateKey);
+  const didAddress = params.issuerDidAddress ?? signer.address;
+  const issuerDid = formatDid(params.network, didAddress);
   const subjectDid = formatDid(params.network, params.subjectAddress);
 
   const vc: Record<string, unknown> = {
@@ -158,7 +168,7 @@ export async function issueJwtCredential(params: {
     vc,
   };
 
-  const jwt = signEs256kJwt(params.issuerPrivateKey, jwtPayload);
+  const jwt = signEs256kJwt(params.issuerPrivateKey, jwtPayload, params.kid);
   const credHash = keccak256(toBytes(jwt));
   return {
     jwt,
@@ -209,7 +219,9 @@ export async function issueMemberCredential(params: {
 
 export async function verifyEcoTestJwt(
   jwt: string,
-  expectedIssuerAddress?: Address
+  expectedIssuerAddress?: Address,
+  /** Extra secp256k1 addresses allowed to sign (e.g. purpose assertion key). */
+  allowedSignerAddresses?: Address[]
 ): Promise<{
   valid: boolean;
   issuerDid: string;
@@ -222,7 +234,7 @@ export async function verifyEcoTestJwt(
     const [headerB64, payloadB64] = jwt.split(".");
     const header = JSON.parse(
       new TextDecoder().decode(base64UrlToBytes(headerB64!))
-    ) as { alg?: string };
+    ) as { alg?: string; kid?: string };
     if (header.alg !== "ES256K") {
       return {
         valid: false,
@@ -254,9 +266,22 @@ export async function verifyEcoTestJwt(
       return emptyFail("Issuer address mismatch");
     }
 
-    const verified = verifyEs256kAgainstAddress(jwt, issuerAddress);
+    const candidates = [
+      issuerAddress,
+      ...(allowedSignerAddresses ?? []),
+    ];
+    const verified = candidates.some((addr) =>
+      verifyEs256kAgainstAddress(jwt, addr)
+    );
     if (!verified) {
-      return emptyFail("Signature verification failed");
+      return {
+        valid: false,
+        issuerDid: payload.iss,
+        subjectDid: payload.sub ?? "",
+        vc: payload.vc ?? {},
+        credHash: keccak256(toBytes(jwt)),
+        error: "Signature verification failed",
+      };
     }
 
     return {

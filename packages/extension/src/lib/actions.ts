@@ -51,6 +51,7 @@ export async function buildClient(withWallet = false): Promise<PerantoClient> {
     addresses: state.settings.addresses,
     rpcUrl: state.settings.rpcUrl,
     privateKey: withWallet ? state.identity!.privateKey : undefined,
+    mnemonic: withWallet ? state.identity!.mnemonic : undefined,
   });
 }
 
@@ -260,6 +261,44 @@ export async function runAction(
       const client = await buildClient(true);
       const tx = await client.deactivateDid();
       return jsonSafe({ tx });
+    }
+
+    case "did.addDelegate": {
+      const delegateType = String(payload.delegateType ?? "svc");
+      const delegate = String(payload.delegate ?? "") as Address;
+      if (!delegate) throw new Error("delegate requerido");
+      const validitySeconds = BigInt(
+        String(payload.validitySeconds ?? String(60 * 60 * 24 * 365))
+      );
+      const client = await buildClient(true);
+      const tx = await client.addDelegate({
+        delegateType,
+        delegate,
+        validitySeconds,
+      });
+      return jsonSafe({ tx, delegateType, delegate });
+    }
+
+    case "did.publishPurposeKeys": {
+      const state = await storage.getState();
+      if (!state.identity?.mnemonic) {
+        throw new Error(
+          "did.publishPurposeKeys requiere mnemonic BIP39 (importa HD, no solo clave EVM)"
+        );
+      }
+      const client = await buildClient(true);
+      return jsonSafe(
+        await client.publishPurposeKeysFromMnemonic(state.identity.mnemonic)
+      );
+    }
+
+    case "did.revokeDelegate": {
+      const delegateType = String(payload.delegateType ?? "svc");
+      const delegate = String(payload.delegate ?? "") as Address;
+      if (!delegate) throw new Error("delegate requerido");
+      const client = await buildClient(true);
+      const tx = await client.revokeDelegate({ delegateType, delegate });
+      return jsonSafe({ tx, delegateType, delegate });
     }
 
     case "name.release": {
