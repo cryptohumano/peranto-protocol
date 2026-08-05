@@ -907,8 +907,18 @@ export function MyPagePage() {
       );
       const missing = writtenAttrKeys.filter((k) => !got.has(k.toLowerCase()));
       if (missing.length) {
+        // Un firmante sin soporte de slot escribe `Type` en vez de `Type.slot`:
+        // se distingue porque el tipo bare sí quedó on-chain.
+        const bare = missing.filter((k) => {
+          const dot = k.indexOf(".");
+          return dot > 0 && got.has(k.slice(0, dot).toLowerCase());
+        });
         setErr(
-          `Sync incompleto tras publicar — no aparecen: ${missing.join(", ")}. Reintenta “Revisar y publicar” o recarga; si persiste, el RPC puede estar truncando logs.`
+          bare.length
+            ? `El firmante escribió ${bare
+                .map((k) => k.slice(0, k.indexOf(".")))
+                .join(", ")} sin slot (${bare.join(", ")}). Recarga la extensión Aura en chrome://extensions y la pestaña (Ctrl+Shift+R), luego vuelve a publicar el enlace.`
+            : `Sync incompleto tras publicar — no aparecen: ${missing.join(", ")}. Reintenta “Revisar y publicar” o recarga; si persiste, el RPC puede estar truncando logs.`
         );
       }
       setCheckoutOpen(false);

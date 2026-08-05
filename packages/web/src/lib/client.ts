@@ -222,25 +222,41 @@ export async function portalSetDidService(
   const attrKey = key?.trim() ? `${type.trim()}.${key.trim()}` : type.trim();
   const display = name?.trim() || key?.trim() || undefined;
   if (writeMode(s) === "aura") {
-    const res = await auraAction("did.setService", {
+    const res = await auraAction<unknown>("did.setService", {
       type,
       serviceEndpoint,
       key,
       name: display,
     });
+    // Aura builds sin soporte de slot firman `did/svc/Type` e ignoran `key`:
+    // el eco del payload es la única señal antes de leer la cadena.
+    const echoed =
+      res && typeof res === "object" && "key" in res
+        ? String((res as { key?: unknown }).key ?? "").trim()
+        : undefined;
+    const wanted = key?.trim() ?? "";
+    const droppedSlot =
+      Boolean(wanted) && echoed !== undefined && echoed !== wanted;
+    const writtenAttrKey = droppedSlot ? type.trim() : attrKey;
     try {
       const addresses = await getAddresses();
       if (s?.did) {
         rememberDidService(addresses.DIDRegistry, s.did, {
-          id: `${s.did}#service-${attrKey}`,
+          id: `${s.did}#service-${writtenAttrKey}`,
           type,
           serviceEndpoint,
-          attrKey,
-          name: display,
+          attrKey: writtenAttrKey,
+          name: droppedSlot ? undefined : display,
         });
       }
     } catch {
       /* cache best-effort */
+    }
+    if (droppedSlot) {
+      throw new Error(
+        `Aura desactualizada: firmó did/svc/${type.trim()} sin el slot “.${wanted}”. ` +
+          `Abre chrome://extensions, recarga Aura y vuelve a publicar.`
+      );
     }
     return res;
   }
