@@ -104,6 +104,11 @@ export function IdentityPage() {
   } | null>(null);
   const [foreignDidDoc, setForeignDidDoc] = useState<DidDocument | null>(null);
 
+  // Aura guarda el mnemonic en la extensión: el portal nunca lo tiene, pero la
+  // acción `did.publishPurposeKeys` sí puede derivar y firmar allí.
+  const canPublishPurposeKeys =
+    Boolean(session?.mnemonic) || session?.source === "aura";
+
   const refresh = useCallback(async () => {
     const s = loadSession();
     setSession(s);
@@ -675,7 +680,7 @@ export function IdentityPage() {
               </FieldHint>
               <Button
                 className="mt-3"
-                disabled={busy || !session.mnemonic}
+                disabled={busy || !canPublishPurposeKeys}
                 onClick={() =>
                   run(async () => {
                     const res = await portalPublishPurposeKeys(session);
@@ -690,9 +695,15 @@ export function IdentityPage() {
               >
                 Publicar claves de propósito
               </Button>
-              {!session.mnemonic && (
+              {!canPublishPurposeKeys && (
                 <FieldHint className="mt-2">
                   Sesión solo-EVM: importa mnemonic HD para derivar purpose keys.
+                </FieldHint>
+              )}
+              {session.source === "aura" && (
+                <FieldHint className="mt-2">
+                  Sesión Aura: la extensión deriva y firma con su propio
+                  mnemonic; el portal nunca lo ve.
                 </FieldHint>
               )}
               <ul className="mt-3 space-y-1 text-[11px] text-muted-foreground">
