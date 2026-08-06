@@ -174,10 +174,27 @@ export async function auraAction<T = unknown>(
   if (action !== "settings.sync") {
     await ensureAuraMatchesPortal();
   }
-  return (await provider.request({
-    method: "peranto_action",
-    params: [action, payload],
-  })) as T;
+  try {
+    return (await provider.request({
+      method: "peranto_action",
+      params: [action, payload],
+    })) as T;
+  } catch (e) {
+    const msg =
+      e instanceof Error
+        ? e.message
+        : typeof e === "object" && e && "message" in e
+          ? String((e as { message?: unknown }).message)
+          : String(e);
+    // El build de Aura sin esta acción responde desde el `default` de runAction.
+    if (/acci[oó]n desconocida/i.test(msg)) {
+      throw new Error(
+        `Aura desactualizada: no conoce la acción “${action}”. Recárgala en ` +
+          `chrome://extensions o entra con sesión HD (mnemonic) para firmar desde el portal.`
+      );
+    }
+    throw e;
+  }
 }
 
 function writeMode(session?: SessionIdentity | null): "aura" | "hd" {
@@ -306,15 +323,43 @@ export async function portalAddDidDelegate(
   });
 }
 
+/**
+ * ¿La identidad de Aura tiene mnemonic BIP39 (única vía para purpose keys)?
+ * `null` cuando Aura no responde o el build no expone `wallet.addresses`.
+ */
+export async function portalAuraHasMnemonic(): Promise<boolean | null> {
+  try {
+    const res = await auraAction<{ hasMnemonic?: unknown }>(
+      "wallet.addresses",
+      {}
+    );
+    return typeof res?.hasMnemonic === "boolean" ? res.hasMnemonic : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function portalPublishPurposeKeys(
   session?: SessionIdentity | null
 ) {
   const s = session ?? loadSession();
   if (writeMode(s) === "aura") {
-    return auraAction<{ hashes: Hex[]; did: string }>(
-      "did.publishPurposeKeys",
-      {}
-    );
+    try {
+      return await auraAction<{ hashes: Hex[]; did: string }>(
+        "did.publishPurposeKeys",
+        {}
+      );
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (/mnemonic/i.test(msg)) {
+        throw new Error(
+          "Aura firma esta acción, pero su identidad se importó con clave privada " +
+            "y sin mnemonic BIP39 no hay derivación. Importa tu frase en Aura, o entra " +
+            "al portal con “Importar mnemonic” para firmar localmente."
+        );
+      }
+      throw e;
+    }
   }
   if (!s?.mnemonic) {
     throw new Error(

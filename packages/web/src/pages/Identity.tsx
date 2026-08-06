@@ -28,6 +28,7 @@ import {
   portalClearDidService,
   portalAddDidDelegate,
   portalRevokeDidDelegate,
+  portalAuraHasMnemonic,
   portalPublishPurposeKeys,
   saveJwtToVault,
   vault,
@@ -104,10 +105,26 @@ export function IdentityPage() {
   } | null>(null);
   const [foreignDidDoc, setForeignDidDoc] = useState<DidDocument | null>(null);
 
-  // Aura guarda el mnemonic en la extensión: el portal nunca lo tiene, pero la
-  // acción `did.publishPurposeKeys` sí puede derivar y firmar allí.
+  // Aura guarda el mnemonic en la extensión: el portal nunca lo tiene, así que
+  // hay que preguntarle si puede derivar (`null` = build antiguo, no bloquear).
+  const [auraHasMnemonic, setAuraHasMnemonic] = useState<boolean | null>(null);
+  const usesAura = session?.source === "aura";
   const canPublishPurposeKeys =
-    Boolean(session?.mnemonic) || session?.source === "aura";
+    Boolean(session?.mnemonic) || (usesAura && auraHasMnemonic !== false);
+
+  useEffect(() => {
+    if (!usesAura) {
+      setAuraHasMnemonic(null);
+      return;
+    }
+    let alive = true;
+    portalAuraHasMnemonic().then((has) => {
+      if (alive) setAuraHasMnemonic(has);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [usesAura]);
 
   const refresh = useCallback(async () => {
     const s = loadSession();
@@ -697,16 +714,18 @@ export function IdentityPage() {
               </Button>
               {!canPublishPurposeKeys && (
                 <FieldHint className="mt-2">
-                  Sesión solo-EVM: importa mnemonic HD para derivar purpose keys.
+                  {usesAura
+                    ? "La identidad de Aura se importó con clave privada: sin mnemonic BIP39 no hay derivación. Importa tu frase en Aura, o entra con “Importar mnemonic”."
+                    : "Sesión solo-EVM: importa mnemonic HD para derivar purpose keys."}
                 </FieldHint>
               )}
-              {session.source === "aura" && (
+              {usesAura && canPublishPurposeKeys && (
                 <FieldHint className="mt-2">
                   Sesión Aura: la extensión deriva y firma con su propio
                   mnemonic; el portal nunca lo ve.
                 </FieldHint>
               )}
-              <ul className="mt-3 space-y-1 text-[11px] text-muted-foreground">
+              <ul className="mt-3 space-y-2 text-[11px] text-muted-foreground">
                 {(didDoc?.verificationMethod ?? [])
                   .filter(
                     (vm) =>
@@ -714,11 +733,22 @@ export function IdentityPage() {
                       vm.id.includes("#key-assertion") ||
                       vm.id.includes("#key-agreement")
                   )
-                  .map((vm) => (
-                    <li key={vm.id} className="font-mono truncate">
-                      {vm.id.split("#")[1]} · {vm.type}
-                    </li>
-                  ))}
+                  .map((vm) => {
+                    const frag = vm.id.split("#")[1] ?? vm.id;
+                    const addr =
+                      vm.blockchainAccountId?.split(":").pop() ??
+                      (vm.publicKeyJwk
+                        ? `X25519 · ${vm.publicKeyJwk.x?.slice(0, 12) ?? "…"}…`
+                        : null);
+                    return (
+                      <li key={vm.id} className="font-mono">
+                        <span className="text-foreground">{frag}</span>
+                        <span className="block truncate opacity-80">
+                          {addr ?? vm.type}
+                        </span>
+                      </li>
+                    );
+                  })}
               </ul>
             </Card>
 
