@@ -34,6 +34,11 @@ import {
   vault,
 } from "@/lib/client";
 import { deriveServiceSlot } from "@/lib/public-page";
+import {
+  isValidNameLabel,
+  nameLabelError,
+  normalizeNameLabel,
+} from "@/lib/name-label";
 import { shortAddr, cn } from "@/lib/utils";
 import { FieldHint, HelpCallout } from "@/components/HelpCallout";
 import { VaultCredentialCard } from "@/components/VaultCredentialCard";
@@ -228,6 +233,8 @@ export function IdentityPage() {
       setBusy(false);
     }
   }
+
+  const nameErr = name ? nameLabelError(name) : null;
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-8">
@@ -513,15 +520,33 @@ export function IdentityPage() {
               <CardTitle>Registrar @nombre</CardTitle>
               <CardDesc>Fee → ProtocolTreasury. Visible on-chain.</CardDesc>
               <Label className="mt-3">Nombre</Label>
-              <Input value={name} onChange={(e) => setName(e.target.value)} />
-              <FieldHint>Sin @; minúsculas [a-z0-9-] longitud 3–32.</FieldHint>
+              <Input
+                value={name}
+                autoCapitalize="off"
+                autoCorrect="off"
+                spellCheck={false}
+                placeholder="trukutu"
+                onChange={(e) => setName(normalizeNameLabel(e.target.value))}
+              />
+              {nameErr ? (
+                <p className="mt-1.5 text-xs text-red-700" role="alert">
+                  {nameErr}
+                </p>
+              ) : (
+                <FieldHint>
+                  Sin @; solo [a-z0-9-], longitud 3–32; se fuerza a minúsculas.
+                </FieldHint>
+              )}
               <div className="mt-3 flex flex-wrap gap-2">
                 <Button
-                  disabled={busy || !name.trim()}
+                  disabled={busy || !isValidNameLabel(name)}
                   onClick={() =>
                     run(async () => {
-                      await portalRegisterName(name.trim(), session);
-                      setMsg(`Registrado @${name.trim()}`);
+                      const label = normalizeNameLabel(name);
+                      const errMsg = nameLabelError(label);
+                      if (errMsg) throw new Error(errMsg);
+                      await portalRegisterName(label, session);
+                      setMsg(`Registrado @${label}`);
                     })
                   }
                 >
