@@ -2,7 +2,7 @@ import { defineConfig, type Plugin } from "vite";
 import path from "node:path";
 import { privateKeyToAccount } from "viem/accounts";
 import type { Hex } from "viem";
-import { createDidConfigurationForOrigin } from "../sdk/src/domain-linkage.ts";
+import { createDidConfigurationForOrigin } from "../sdk/src/domain-linkage";
 
 const PORT = 5174;
 const ORIGIN = `http://localhost:${PORT}`;
