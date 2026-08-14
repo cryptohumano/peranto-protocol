@@ -17,6 +17,7 @@
     "@scure/bip32": "^1.7.0",
     "@scure/bip39": "^1.6.0",
     "jose": "^5.9.6",
+    "poseidon-lite": "^0.3.0",
     "viem": "^2.21.54"
   },
   "devDependencies": {

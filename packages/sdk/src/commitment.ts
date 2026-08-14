@@ -2,21 +2,21 @@
  * Claims commitment for compliance VCs (liveness / residence).
  * Stored on-chain via CredentialStatusRegistry.anchorV2; opened in ZK gate.
  *
- * H = keccak256(abi.encode(
- *   schemaKind, countryCode, scoreBps, expiresAtUnix, subject, salt
- * ))
+ * Poseidon-128 / Circom (Noir `hash_7`), domain-separated:
+ *   H = poseidon7(version=2, schemaKind, countryCode, scoreBps, expiresAtUnix, subject, salt)
  *
  * schemaKind: 1 = Liveness, 2 = Residence
- * countryCode: ISO alpha-2 as uint16 (A=1 … Z=26) → c0*26+c1 (0 if unused)
+ * countryCode: ISO alpha-2 packed (MX → 1324); 0 if unused
  * scoreBps: score * 10000 (e.g. 0.95 → 9500); 0 if unused
+ * salt/subject reduced into BN254 Fr
  */
+import { type Address, type Hex } from "viem";
 import {
-  type Address,
-  type Hex,
-  encodeAbiParameters,
-  keccak256,
-  parseAbiParameters,
-} from "viem";
+  CLAIMS_COMMIT_VERSION,
+  fieldToHex,
+  poseidon7,
+  toField,
+} from "./poseidon";
 
 export const CLAIMS_SCHEMA_KIND = {
   Liveness: 1n,
@@ -66,20 +66,16 @@ export function expiresAtToUnix(expiresAt: string | number | Date): number {
 }
 
 export function computeClaimsCommitment(input: ClaimsCommitmentInput): Hex {
-  return keccak256(
-    encodeAbiParameters(
-      parseAbiParameters(
-        "uint256 schemaKind, uint256 countryCode, uint256 scoreBps, uint256 expiresAtUnix, address subject, bytes32 salt"
-      ),
-      [
-        input.schemaKind,
-        BigInt(input.countryCode),
-        BigInt(input.scoreBps),
-        BigInt(input.expiresAtUnix),
-        input.subject,
-        input.salt,
-      ]
-    )
+  return fieldToHex(
+    poseidon7([
+      CLAIMS_COMMIT_VERSION,
+      toField(input.schemaKind),
+      toField(input.countryCode),
+      toField(input.scoreBps),
+      toField(input.expiresAtUnix),
+      toField(input.subject),
+      toField(input.salt),
+    ])
   );
 }
 
@@ -90,6 +86,8 @@ export function randomSalt(): Hex {
   } else {
     for (let i = 0; i < 32; i++) bytes[i] = Math.floor(Math.random() * 256);
   }
+  // Keep salt inside BN254 Fr so it is a valid Noir Field witness.
+  bytes[0] = 0;
   return (`0x${[...bytes].map((b) => b.toString(16).padStart(2, "0")).join("")}`) as Hex;
 }
 

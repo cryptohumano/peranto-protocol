@@ -40,6 +40,9 @@ body {
   padding: 0;
   width: 380px;
   min-height: 560px;
+  max-height: 100vh;
+  overflow-x: hidden;
+  overflow-y: auto;
   background: var(--bg0);
   color: var(--text);
   font-family: var(--font);
@@ -676,6 +679,41 @@ textarea {
 }
 
 .authorize[hidden] {
+  display: none !important;
+}
+
+.holder-share {
+  max-height: min(78vh, 640px);
+  overflow: hidden;
+}
+
+.holder-share .share-candidates {
+  max-height: 132px;
+  overflow-y: auto;
+  flex-shrink: 0;
+}
+
+.holder-share .claims-list {
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.holder-share .share-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  margin-top: 4px;
+  padding-top: 8px;
+  flex-wrap: wrap;
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    rgba(18, 26, 36, 0.92) 28%
+  );
+  flex-shrink: 0;
+}
+
+.btn[hidden] {
   display: none !important;
 }
 

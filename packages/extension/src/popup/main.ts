@@ -230,6 +230,21 @@ async function renderAuthorizePanel() {
   setStatus("Hay una dapp esperando tu aprobación", "ok");
 }
 
+type ShareCandidateUi = {
+  credHash: string;
+  schemaKey: string;
+  label: string;
+  issuerDid: string;
+  claimKeys?: string[];
+  claimPreview?: Record<string, unknown>;
+};
+
+let sharePendingMode: "credential" | "claims" = "credential";
+let shareRequiredDisclose: string[] = [];
+let shareCandidates: ShareCandidateUi[] = [];
+let shareSelectedHash: string | null = null;
+let shareRenderedPendingId: string | null = null;
+
 async function renderHolderPanels() {
   const savePanel = $("#save-panel");
   const sharePanel = $("#share-panel");
@@ -268,6 +283,11 @@ async function renderHolderPanels() {
   if (!pending || pending.kind !== "share") {
     sharePanel.hidden = true;
     shareSelectedHash = null;
+    shareRenderedPendingId = null;
+    const claimsBox = $("#share-claims-box");
+    if (claimsBox) claimsBox.hidden = true;
+    const confirmBtn = $("#btn-confirm-share-claims");
+    if (confirmBtn) confirmBtn.hidden = true;
     return;
   }
 
@@ -280,11 +300,14 @@ async function renderHolderPanels() {
     ? (pending.candidates as ShareCandidateUi[])
     : [];
 
+  const pendingId = String(pending.id ?? "");
+  const samePending = Boolean(pendingId && pendingId === shareRenderedPendingId);
+
   const modeHint = $("#share-mode-hint");
   if (modeHint) {
     modeHint.textContent =
       sharePendingMode === "claims"
-        ? "Modo claims: revelas solo campos elegidos (sin JWT completo)."
+        ? "Modo claims: elige la VC, marca atributos y pulsa Firmar y compartir."
         : "Modo credential: se comparte el JWT completo + firma del challenge.";
   }
   $("#share-origin").textContent = String(pending.origin ?? "");
@@ -294,10 +317,19 @@ async function renderHolderPanels() {
   $("#share-schemas").textContent = `Pide: ${keys || "—"}`;
   $("#share-challenge").textContent = `Challenge ${short(String(pending.challenge ?? ""), 12)}`;
 
+  // Poll cada 1.5s no debe destruir checkboxes / selección / botón compartir.
+  if (samePending) {
+    return;
+  }
+
+  shareRenderedPendingId = pendingId || null;
+  shareSelectedHash = null;
   const list = $("#share-candidates");
   const empty = $("#share-empty");
   const claimsBox = $("#share-claims-box");
+  const confirmBtn = $("#btn-confirm-share-claims");
   if (claimsBox) claimsBox.hidden = true;
+  if (confirmBtn) confirmBtn.hidden = true;
 
   if (!shareCandidates.length) {
     list.innerHTML = "";
@@ -317,37 +349,26 @@ async function renderHolderPanels() {
   }
   setStatus(
     sharePendingMode === "claims"
-      ? "Elige VC y claims a revelar"
+      ? "Elige VC, marca claims y confirma — el panel no se cierra solo"
       : "dApp pide una credencial — elige cuál compartir",
     "ok"
   );
 }
 
-type ShareCandidateUi = {
-  credHash: string;
-  schemaKey: string;
-  label: string;
-  issuerDid: string;
-  claimKeys?: string[];
-  claimPreview?: Record<string, unknown>;
-};
-
-let sharePendingMode: "credential" | "claims" = "credential";
-let shareRequiredDisclose: string[] = [];
-let shareCandidates: ShareCandidateUi[] = [];
-let shareSelectedHash: string | null = null;
-
 function renderShareClaimsPicker(candidate: ShareCandidateUi) {
   const box = $("#share-claims-box");
   const list = $("#share-claims-list");
+  const confirmBtn = $("#btn-confirm-share-claims");
   if (!box || !list) return;
   const preview = candidate.claimPreview ?? {};
   const keys = Object.keys(preview);
   if (!keys.length) {
     box.hidden = true;
+    if (confirmBtn) confirmBtn.hidden = true;
     return;
   }
   box.hidden = false;
+  if (confirmBtn) confirmBtn.hidden = false;
   list.innerHTML = keys
     .map((k) => {
       const required = shareRequiredDisclose.includes(k);
@@ -999,9 +1020,13 @@ function bindActions() {
   });
 
   $("#btn-approve-prove")?.addEventListener("click", async () => {
+    const btn = $("#btn-approve-prove") as HTMLButtonElement;
+    btn.disabled = true;
+    setStatus("Computando circuito Noir (UltraHonk)… no cierres Aura", "ok");
     const res = await send({ type: "APPROVE_PROVE_COMPLIANCE" });
+    btn.disabled = false;
     if (!res.ok) return setStatus(res.error, "err");
-    setStatus("Prueba ZK aprobada", "ok");
+    setStatus("Prueba Honk lista — la dapp la recibirá", "ok");
     await refresh();
   });
   $("#btn-reject-prove")?.addEventListener("click", async () => {
@@ -1027,6 +1052,8 @@ function bindActions() {
       ".share-pick"
     );
     if (!btn?.dataset.hash) return;
+    ev.preventDefault();
+    ev.stopPropagation();
     const hash = btn.dataset.hash;
     shareSelectedHash = hash;
     document
@@ -1037,7 +1064,7 @@ function bindActions() {
     if (sharePendingMode === "claims") {
       const cand = shareCandidates.find((c) => c.credHash === hash);
       if (cand) renderShareClaimsPicker(cand);
-      setStatus("Marca claims y confirma", "ok");
+      setStatus("Marca claims y pulsa Firmar y compartir", "ok");
       return;
     }
 
@@ -1081,8 +1108,10 @@ function bindActions() {
 bindTabs();
 bindActions();
 void refresh().then(() => setStatus("Listo"));
-// Mantener paneles holder al día si llega una solicitud con el popup abierto
+// Mantener paneles holder al día si llega una solicitud con el popup abierto.
+// No re-pintar Share si el usuario ya eligió una VC (checkboxes / botón).
 setInterval(() => {
   void renderAuthorizePanel();
+  if (shareSelectedHash && !$("#share-claims-box")?.hidden) return;
   void renderHolderPanels();
 }, 1500);

@@ -2,19 +2,16 @@
  * Holder flows Sporran-like: Save credential + Share (present) with user consent.
  * Pending state lives in chrome.storage so popup and service worker stay in sync.
  */
-import { keccak256, toBytes, type Address, type Hex } from "viem";
+import { keccak256, toBytes, type Hex } from "viem";
 import {
   peekJwtClaims,
   verifyEcoTestJwt,
   claimsFromJwt,
   createClaimsPresentation,
   createCredentialPresentation,
-  proveComplianceGateAlgebraic,
-  scoreToBps,
-  expiresAtToUnix,
-  parseDid,
   SCHEMA_KEYS,
   type PresentationMode,
+  type ComplianceGatePublicSignals,
 } from "@peranto/sdk";
 import * as storage from "./storage";
 import type { StoredCredential } from "./types";
@@ -22,7 +19,7 @@ import { openAuraConsentWindow } from "./open-consent";
 
 const PENDING_KEY = "aura_pending_holder";
 const POLL_MS = 400;
-const WAIT_MS = 110_000;
+const WAIT_MS = 180_000;
 
 export type PendingSave = {
   kind: "save";
@@ -76,6 +73,15 @@ export type PendingProve = {
   createdAt: string;
 };
 
+export type HonkHolderResult = {
+  mode: "honk";
+  liveCredHash: string;
+  resCredHash: string;
+  publicSignals: unknown;
+  proof: { proof: string; publicInputs: string[] };
+  note: string;
+};
+
 export type PendingHolder = PendingSave | PendingShare | PendingProve;
 
 type PendingRecord =
@@ -84,7 +90,7 @@ type PendingRecord =
       status: "approved";
       selectedCredHash?: string;
       disclosedKeys?: string[];
-      result?: unknown;
+      result?: HonkHolderResult;
     })
   | (PendingHolder & { status: "rejected"; reason?: string });
 
@@ -366,12 +372,11 @@ export async function beginProveComplianceGate(opts: {
   minScoreBps: number;
   allowlist: string[];
 }): Promise<{
-  mode: "algebraic";
+  mode: "honk";
   liveCredHash: Hex;
   resCredHash: Hex;
-  publicSignals: ReturnType<
-    typeof proveComplianceGateAlgebraic
-  >["publicSignals"];
+  publicSignals: ComplianceGatePublicSignals;
+  proof: { proof: string; publicInputs: string[] };
   note: string;
 }> {
   const state = await storage.getState();
@@ -420,53 +425,28 @@ export async function beginProveComplianceGate(opts: {
     throw new Error(resolved.reason || "Aura: usuario rechazó la prueba ZK");
   }
 
-  const liveClaims = claimsFromJwt(live.jwt);
-  const resClaims = claimsFromJwt(residence.jwt);
-  const { address: subject } = parseDid(state.identity.did);
-  const now = Math.floor(Date.now() / 1000);
-  const score = Number(liveClaims.score ?? liveClaims.livenessScore ?? 0);
-  const country = String(resClaims.country ?? "");
-  const liveExp = expiresAtToUnix(
-    String(liveClaims.expiresAt ?? live.meta.validUntil ?? now)
-  );
-  const resExp = expiresAtToUnix(
-    String(resClaims.expiresAt ?? residence.meta.validUntil ?? now)
-  );
-
-  const proof = proveComplianceGateAlgebraic(
-    {
-      live: {
-        scoreBps: scoreToBps(score),
-        expiresAtUnix: liveExp,
-        subject: subject as Address,
-        salt: live.meta.commitmentSalt,
-        commitment: live.meta.claimsCommitment,
-        credHash: live.credHash,
-      },
-      residence: {
-        country,
-        expiresAtUnix: resExp,
-        subject: subject as Address,
-        salt: residence.meta.commitmentSalt,
-        commitment: residence.meta.claimsCommitment,
-        credHash: residence.credHash,
-      },
-    },
-    {
-      minScoreBps: opts.minScoreBps,
-      allowlist: opts.allowlist,
-      now,
-    }
-  );
+  const honk =
+    resolved.status === "approved" ? resolved.result : undefined;
+  if (!honk || honk.mode !== "honk" || !honk.proof) {
+    await writePending(null);
+    throw new Error(
+      "Aura: no hay prueba Honk — recarga la extensión y pulsa Generar en el popup (Noir/bb.js)"
+    );
+  }
 
   await writePending(null);
-  // Strip witness — never return openings to the dapp/curator path.
-  return {
-    mode: "algebraic",
+  console.info("[Aura] compliance prove = UltraHonk (Noir circuit in popup)", {
+    mode: honk.mode,
     liveCredHash: live.credHash,
     resCredHash: residence.credHash,
-    publicSignals: proof.publicSignals,
-    note: "publicSignals only — claims and salt stay in Aura",
+  });
+  return {
+    mode: "honk",
+    liveCredHash: live.credHash,
+    resCredHash: residence.credHash,
+    publicSignals: honk.publicSignals as ComplianceGatePublicSignals,
+    proof: honk.proof,
+    note: honk.note,
   };
 }
 
@@ -476,7 +456,14 @@ export async function approvePendingProve(): Promise<void> {
   if (!rec || rec.kind !== "prove" || rec.status !== "pending") {
     throw new Error("No hay solicitud de prueba ZK pendiente");
   }
-  await writePending({ ...rec, status: "approved" });
+  if (typeof document === "undefined") {
+    throw new Error(
+      "La prueba Honk debe generarse en la ventana de Aura, no en el service worker"
+    );
+  }
+  const { proveHonkForPending } = await import("./honk-prove");
+  const result = await proveHonkForPending(rec);
+  await writePending({ ...rec, status: "approved", result });
 }
 
 export async function approvePendingSave(): Promise<void> {

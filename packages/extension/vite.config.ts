@@ -8,9 +8,21 @@ export default defineConfig({
   resolve: {
     alias: {
       "@peranto/sdk": path.resolve(__dirname, "../sdk/src/browser.ts"),
+      "@peranto/circuit": path.resolve(
+        __dirname,
+        "../zk-compliance/circuit.slim.json"
+      ),
+      "@aztec/bb.js": path.resolve(
+        __dirname,
+        "../../node_modules/@aztec/bb.js/dest/browser/index.js"
+      ),
     },
   },
+  worker: {
+    format: "es",
+  },
   optimizeDeps: {
+    exclude: ["@aztec/bb.js", "@noir-lang/noir_js"],
     esbuildOptions: {
       target: "esnext",
     },

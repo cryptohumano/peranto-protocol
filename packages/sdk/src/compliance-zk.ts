@@ -4,14 +4,9 @@
  *
  * Modes:
  * - algebraic: holder-side / tests (opens commitment locally; not for curator UI)
- * - groth16: when packages/zk-compliance artifacts are built (snarkjs)
+ * - honk: Noir + Barretenberg UltraHonk (`@peranto/zk-compliance`)
  */
 import type { Address, Hex } from "viem";
-import {
-  encodeAbiParameters,
-  keccak256,
-  parseAbiParameters,
-} from "viem";
 import {
   CLAIMS_SCHEMA_KIND,
   codeToCountry,
@@ -20,6 +15,7 @@ import {
   scoreToBps,
   type ClaimsCommitmentInput,
 } from "./commitment";
+import { ALLOWLIST_MAX, fieldToHex, poseidon8, toField } from "./poseidon";
 
 export type CompliancePolicy = {
   minScoreBps: number;
@@ -59,24 +55,30 @@ export type ComplianceGatePublicSignals = {
 };
 
 export type ComplianceGateProof = {
-  mode: "algebraic" | "groth16";
+  mode: "algebraic" | "honk";
   publicSignals: ComplianceGatePublicSignals;
-  /** Opaque groth16 proof JSON when mode=groth16 */
+  /** UltraHonk proof bytes / JSON when mode=honk */
   proof?: unknown;
   /** Only present in algebraic mode (never send to curator) */
   _debugWitness?: ComplianceWitness;
 };
 
-/** Deterministic allowlist root: keccak of sorted country codes. */
-export function computeAllowlistRoot(allowlist: string[]): Hex {
+/** Sorted unique country codes padded to ALLOWLIST_MAX (0-fill). */
+export function allowlistCodes(allowlist: string[]): number[] {
   const codes = [
     ...new Set(allowlist.map((c) => countryToCode(c)).filter((n) => n > 0)),
   ].sort((a, b) => a - b);
-  return keccak256(
-    encodeAbiParameters(parseAbiParameters("uint256[]"), [
-      codes.map((c) => BigInt(c)),
-    ])
-  );
+  if (codes.length > ALLOWLIST_MAX) {
+    throw new Error(`allowlist longer than ${ALLOWLIST_MAX}`);
+  }
+  const padded = codes.slice();
+  while (padded.length < ALLOWLIST_MAX) padded.push(0);
+  return padded;
+}
+
+/** Poseidon-8 of padded allowlist codes — public policy root for the Noir gate. */
+export function computeAllowlistRoot(allowlist: string[]): Hex {
+  return fieldToHex(poseidon8(allowlistCodes(allowlist).map((c) => toField(c))));
 }
 
 function countryInAllowlist(country: string, allowlist: string[]): boolean {
@@ -93,7 +95,7 @@ export function verifyCommitmentOpening(
 
 /**
  * Build an algebraic compliance proof (for tests / holder self-check).
- * Curators should prefer groth16 mode so witnesses never leave the wallet.
+ * Curators should prefer honk mode so witnesses never leave the wallet.
  */
 export function proveComplianceGateAlgebraic(
   witness: ComplianceWitness,
@@ -166,7 +168,7 @@ export type VerifyComplianceGateResult = {
 /**
  * Verify algebraic proof against policy + expected on-chain commitments.
  * Does not accept _debugWitness from untrusted parties — openings must be
- * re-derived only in groth16 mode. Algebraic verify requires matching
+ * re-derived only in honk mode. Algebraic verify requires matching
  * publicSignals to registry commitments and policy root/now/score.
  */
 export function verifyComplianceGatePublic(
@@ -201,7 +203,7 @@ export function verifyComplianceGatePublic(
     if (!w) {
       return {
         ok: false,
-        error: "algebraic proof without witness — use groth16 for remote verify",
+        error: "algebraic proof without witness — use honk for remote verify",
       };
     }
     try {
@@ -211,10 +213,9 @@ export function verifyComplianceGatePublic(
       return { ok: false, error: e instanceof Error ? e.message : String(e) };
     }
   }
-  // groth16: snarkjs verify happens in @peranto/zk-compliance
   return {
     ok: false,
-    error: "groth16 verify requires @peranto/zk-compliance artifacts",
+    error: "honk verify requires @peranto/zk-compliance (Noir + bb)",
   };
 }
 

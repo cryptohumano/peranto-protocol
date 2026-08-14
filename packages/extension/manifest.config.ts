@@ -52,6 +52,8 @@ export default defineManifest({
     "http://localhost:8787/*",
     "http://127.0.0.1:8787/*",
     "https://eth-rpc-testnet.polkadot.io/*",
+    "https://crs.aztec-cdn.foundation/*",
+    "https://crs.aztec-labs.com/*",
   ],
   // @polkadot/wasm-crypto needs WASM compile in popup/SW (MV3 default CSP forbids it)
   content_security_policy: {

@@ -3,17 +3,23 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "ComplianceGate circuit + prove/verify helpers for Peranto bounty gate",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "description": "ComplianceGate Noir circuit + UltraHonk (bb) prove/verify",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json --noCheck",
     "build:circuit": "node scripts/build-circuit.mjs",
-    "test": "node --import tsx --test src/**/*.test.ts"
+    "prove": "node --import tsx scripts/prove.mjs",
+    "export-verifier": "node scripts/export-verifier.mjs",
+    "test": "node --import tsx --test --test-timeout=180000 src/**/*.test.ts"
   },
   "dependencies": {
+    "@aztec/bb.js": "5.0.0-nightly.20260324",
+    "@noir-lang/noir_js": "1.0.0-beta.20",
     "@peranto/sdk": "file:../sdk",
-    "snarkjs": "^0.7.5",
     "viem": "^2.21.54"
   },
   "devDependencies": {

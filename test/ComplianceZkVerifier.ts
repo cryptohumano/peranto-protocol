@@ -134,4 +134,17 @@ describe("ComplianceZkVerifier", function () {
       )
     ).to.be.revertedWith("ComplianceZk: live invalid");
   });
+
+  it("verifyGateHonk reverts when HonkVerifier is unset", async function () {
+    const { gate } = await deploy();
+    await expect(
+      gate.verifyGateHonk(
+        ethers.id("live"),
+        ethers.id("res"),
+        0n,
+        "0x",
+        [0n, 0n, 0n, 0n, 0n]
+      )
+    ).to.be.revertedWith("ComplianceZk: honk unset");
+  });
 });

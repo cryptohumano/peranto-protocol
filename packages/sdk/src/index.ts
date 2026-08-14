@@ -2,6 +2,7 @@ export * from "./did";
 export * from "./vc";
 export * from "./schemas";
 export * from "./commitment";
+export * from "./poseidon";
 export * from "./domain-linkage";
 export * from "./credential-file";
 export * from "./presentation";

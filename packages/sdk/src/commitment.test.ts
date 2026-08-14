@@ -36,6 +36,11 @@ describe("claims commitment", () => {
     });
     assert.equal(a.commitment, b);
     assert.equal(a.scoreBps, 9500);
+    assert.match(a.commitment, /^0x[0-9a-f]{64}$/i);
+    assert.notEqual(
+      a.commitment,
+      "0x0000000000000000000000000000000000000000000000000000000000000000"
+    );
   });
 
   it("encodes country MX", () => {

@@ -12,7 +12,8 @@
     "esModuleInterop": true,
     "types": ["chrome"],
     "paths": {
-      "@peranto/sdk": ["../sdk/src/browser.ts"]
+      "@peranto/sdk": ["../sdk/src/browser.ts"],
+      "@peranto/circuit": ["../zk-compliance/circuit.slim.json"]
     }
   },
   "include": ["src/**/*", "vite.config.ts", "manifest.config.ts"]

@@ -19,7 +19,11 @@ interface ICredentialStatusV2 {
         );
 }
 
-/// @dev Optional Groth16 verifier (snarkjs export). address(0) = off-chain proofs only.
+interface IHonkVerifier {
+    function verify(bytes calldata proof, bytes32[] calldata publicInputs) external view returns (bool);
+}
+
+/// @dev Optional Groth16 verifier (snarkjs export). address(0) = unused.
 interface IGroth16Verifier {
     function verifyProof(
         uint256[2] calldata a,
@@ -32,11 +36,13 @@ interface IGroth16Verifier {
 /**
  * @title ComplianceZkVerifier
  * @notice Curator gate: both compliance creds must be isValid on-chain,
- *         public commitments must match registry, and (if configured) Groth16 proof.
+ *         public Poseidon claimsCommitments must match registry.
+ *         Optional UltraHonk (`HonkVerifier`) or Groth16 slot for SNARK verify.
  */
 contract ComplianceZkVerifier {
     ICredentialStatusV2 public immutable credentialStatus;
     IGroth16Verifier public groth16;
+    IHonkVerifier public honk;
     address public governance;
 
     uint256 public minScoreBps;
@@ -44,12 +50,13 @@ contract ComplianceZkVerifier {
 
     event GovernanceUpdated(address indexed previous, address indexed next);
     event Groth16Updated(address indexed previous, address indexed next);
+    event HonkUpdated(address indexed previous, address indexed next);
     event PolicyUpdated(uint256 minScoreBps, bytes32 allowlistRoot);
     event GateVerified(
         bytes32 indexed liveCredHash,
         bytes32 indexed resCredHash,
         address indexed subject,
-        bool usedGroth16
+        uint8 snarkKind
     );
 
     modifier onlyGovernance() {
@@ -82,31 +89,23 @@ contract ComplianceZkVerifier {
         groth16 = IGroth16Verifier(next);
     }
 
+    function setHonk(address next) external onlyGovernance {
+        emit HonkUpdated(address(honk), next);
+        honk = IHonkVerifier(next);
+    }
+
     function setPolicy(uint256 minScoreBps_, bytes32 allowlistRoot_) external onlyGovernance {
         minScoreBps = minScoreBps_;
         allowlistRoot = allowlistRoot_;
         emit PolicyUpdated(minScoreBps_, allowlistRoot_);
     }
 
-    /**
-     * @param liveCredHash LivenessCheck credential hash
-     * @param resCredHash ProofOfResidence credential hash
-     * @param nowTs Public time bound (must be <= block.timestamp + 300 and >= block.timestamp - 3600)
-     * @param a Groth16 proof A (zeroed if groth16 unset — then only registry checks)
-     * @param b Groth16 proof B
-     * @param c Groth16 proof C
-     * @param publicInputs [liveCommitment, resCommitment, minScoreBps, allowlistRoot, now]
-     *        commitments encoded as uint256(uint160 left) not — full bytes32 as uint256
-     */
-    function verifyGate(
+    function _bindRegistry(
         bytes32 liveCredHash,
         bytes32 resCredHash,
         uint64 nowTs,
-        uint256[2] calldata a,
-        uint256[2][2] calldata b,
-        uint256[2] calldata c,
         uint256[5] calldata publicInputs
-    ) external returns (bool) {
+    ) internal view returns (address subject) {
         require(credentialStatus.isValid(liveCredHash), "ComplianceZk: live invalid");
         require(credentialStatus.isValid(resCredHash), "ComplianceZk: res invalid");
 
@@ -140,22 +139,64 @@ contract ComplianceZkVerifier {
         require(publicInputs[2] == minScoreBps, "ComplianceZk: minScore");
         require(bytes32(publicInputs[3]) == allowlistRoot, "ComplianceZk: allowlist");
         require(publicInputs[4] == uint256(nowTs), "ComplianceZk: now signal");
+        return liveSubject;
+    }
 
-        bool usedGroth16 = false;
+    /**
+     * @param liveCredHash LivenessCheck credential hash
+     * @param resCredHash ProofOfResidence credential hash
+     * @param nowTs Public time bound (must be <= block.timestamp + 300 and >= block.timestamp - 3600)
+     * @param a Groth16 proof A (zeroed if groth16 unset — then only registry checks)
+     * @param b Groth16 proof B
+     * @param c Groth16 proof C
+     * @param publicInputs [liveCommitment, resCommitment, minScoreBps, allowlistRoot, now]
+     */
+    function verifyGate(
+        bytes32 liveCredHash,
+        bytes32 resCredHash,
+        uint64 nowTs,
+        uint256[2] calldata a,
+        uint256[2][2] calldata b,
+        uint256[2] calldata c,
+        uint256[5] calldata publicInputs
+    ) external returns (bool) {
+        address liveSubject = _bindRegistry(liveCredHash, resCredHash, nowTs, publicInputs);
+
+        uint8 snarkKind = 0;
         if (address(groth16) != address(0)) {
             uint256[] memory inputs = new uint256[](5);
             for (uint256 i = 0; i < 5; i++) {
                 inputs[i] = publicInputs[i];
             }
             require(groth16.verifyProof(a, b, c, inputs), "ComplianceZk: bad proof");
-            usedGroth16 = true;
+            snarkKind = 1;
         } else {
-            // Without on-chain groth16, registry+policy binding still holds;
-            // claim values stay off-chain (ZK proof verified off-chain by curator SDK).
             require(a[0] == 0 && a[1] == 0 && c[0] == 0 && c[1] == 0, "ComplianceZk: unexpected proof");
         }
 
-        emit GateVerified(liveCredHash, resCredHash, liveSubject, usedGroth16);
+        emit GateVerified(liveCredHash, resCredHash, liveSubject, snarkKind);
+        return true;
+    }
+
+    /**
+     * @notice Registry binding + UltraHonk SNARK. `proof` is bb.js EVM-target bytes;
+     *         `publicInputs` are the 5 circuit pubs (pairing points live in the proof).
+     */
+    function verifyGateHonk(
+        bytes32 liveCredHash,
+        bytes32 resCredHash,
+        uint64 nowTs,
+        bytes calldata proof,
+        uint256[5] calldata publicInputs
+    ) external returns (bool) {
+        require(address(honk) != address(0), "ComplianceZk: honk unset");
+        address liveSubject = _bindRegistry(liveCredHash, resCredHash, nowTs, publicInputs);
+        bytes32[] memory inputs = new bytes32[](5);
+        for (uint256 i = 0; i < 5; i++) {
+            inputs[i] = bytes32(publicInputs[i]);
+        }
+        require(honk.verify(proof, inputs), "ComplianceZk: bad honk");
+        emit GateVerified(liveCredHash, resCredHash, liveSubject, 2);
         return true;
     }
 

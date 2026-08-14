@@ -1,22 +1,34 @@
 # @peranto/zk-compliance
 
-Groth16 **ComplianceGate** for the bounty compliance flow (liveness + residence + vigencia).
+Noir **ComplianceGate** proved with Barretenberg **UltraHonk** (`bb` / `@aztec/bb.js`).
 
-## What it proves
+Opens Poseidon-128 claims commitments from `@peranto/sdk` (`hash_7` / Circom-compatible):
 
-`notExpired ∧ scoreBps ≥ minScoreBps ∧ country ∈ allowlist`, binding public `claimsCommitment`s that were anchored via `CredentialStatusRegistry.anchorV2`.
+`notExpired ∧ scoreBps ≥ minScoreBps ∧ country ∈ allowlist`
 
-## Build circuit (optional)
+## Prereqs
 
-Requires [circom](https://docs.circom.io/) 2.x on `PATH`:
+- [Nargo](https://noir-lang.org/) 1.0.x (`nargo --version`)
+- [bb](https://github.com/AztecProtocol/aztec-packages) 5.x (`bb --version`) matching `@aztec/bb.js`
+
+## Build circuit
 
 ```bash
 npm run build:circuit -w @peranto/zk-compliance
-# then follow artifacts/NEXT_STEPS.txt (snarkjs ptau + zkey + solidityverifier)
 ```
 
-Without circom, the registry + algebraic helpers in `@peranto/sdk` still enforce vigencia and policy for holder self-checks. On-chain gate: `ComplianceZkVerifier`.
+Writes `packages/zk-compliance/circuit.json` (committed). Without nargo the script skips.
 
-## On-chain
+## Prove / verify (Node)
 
-[`contracts/ComplianceZkVerifier.sol`](../../contracts/ComplianceZkVerifier.sol) checks `isValid` + commitment match + optional Groth16 verifier address.
+```bash
+npm test -w @peranto/zk-compliance
+```
+
+Uses `bb` via Unix socket when the binary is on `PATH`, otherwise WASM.
+
+Aura keeps salts in the vault and generates an **UltraHonk** proof in the popup (`bb.js` WASM). The attester verifies that proof off-chain. On-chain `ComplianceZkVerifier.verifyGateHonk` calls the generated `HonkVerifier` once `setHonk` is set.
+
+```bash
+npm run export-verifier -w @peranto/zk-compliance
+```

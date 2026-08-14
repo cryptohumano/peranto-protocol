@@ -321,13 +321,13 @@ async function runZkGateDemo() {
         verified,
         mode: proof.mode,
         publicSignals: proof.publicSignals,
-        note: "Curator only sees publicSignals (+ groth16 proof). Claims stay local.",
+        note: "Curator only sees publicSignals (+ UltraHonk proof from zk-compliance). Claims stay local.",
       },
       null,
       2
     );
     log(
-      verified.ok ? "✓ ZK gate (algebraic) OK" : "✗ ZK gate failed",
+      verified.ok ? "✓ ZK gate (Poseidon algebraic) OK" : "✗ ZK gate failed",
       verified
     );
   } catch (e) {

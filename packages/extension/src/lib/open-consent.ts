@@ -27,8 +27,8 @@ export async function openAuraConsentWindow(): Promise<void> {
     const win = await chrome.windows.create({
       url,
       type: "popup",
-      width: 400,
-      height: 640,
+      width: 420,
+      height: 720,
       focused: true,
     });
     consentWindowId = win.id;

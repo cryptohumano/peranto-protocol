@@ -97,18 +97,23 @@
         <p class="mono tiny" id="share-origin"></p>
         <p class="hint" id="share-schemas"></p>
         <p class="mono tiny" id="share-challenge"></p>
-        <div id="share-candidates" class="vault"></div>
+        <div id="share-candidates" class="vault share-candidates"></div>
         <div id="share-claims-box" hidden>
           <p class="hint">Claims a revelar (sin enviar el JWT completo):</p>
           <div id="share-claims-list" class="claims-list"></div>
-          <button type="button" class="btn primary" id="btn-confirm-share-claims">
-            Firmar y compartir claims
-          </button>
         </div>
         <p class="hint" id="share-empty" hidden>
           No tienes credenciales que coincidan.
         </p>
-        <div class="row">
+        <div class="row share-actions">
+          <button
+            type="button"
+            class="btn primary"
+            id="btn-confirm-share-claims"
+            hidden
+          >
+            Firmar y compartir
+          </button>
           <button type="button" class="btn danger" id="btn-reject-share">
             Rechazar
           </button>
@@ -119,15 +124,17 @@
       <aside class="authorize holder-share" id="prove-panel" hidden>
         <h2>Prueba ZK</h2>
         <p class="hint">
-          La dapp pide una prueba de cumplimiento <strong>sin</strong> ver score
-          ni país. El salt no sale de Aura.
+          La dapp pide cumplimiento <strong>sin</strong> ver score ni país. El
+          salt no sale de Aura. Al confirmar se ejecuta el circuito Noir
+          (UltraHonk / bb.js) en esta ventana — tarda unos segundos la primera
+          vez (descarga CRS).
         </p>
         <p class="mono tiny" id="prove-origin"></p>
         <p class="hint" id="prove-policy"></p>
         <p class="mono tiny" id="prove-creds"></p>
         <div class="row">
           <button type="button" class="btn primary" id="btn-approve-prove">
-            Generar y enviar prueba
+            Generar prueba Honk
           </button>
           <button type="button" class="btn danger" id="btn-reject-prove">
             Rechazar
