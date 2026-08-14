@@ -6,6 +6,7 @@ import {
   createIdentity,
   formatDid,
   loadDeployment,
+  NATIVE_TOKEN,
   parseEther,
   resolveDidDocument,
   type PerantoNetwork,
@@ -18,20 +19,27 @@ function usage(): never {
 Usage:
   peranto did create [--network hardhat|paseo|base|baseSepolia|arbitrum|arbitrumSepolia]
   peranto did resolve <did>
+  peranto did-config create --origin <https://…> --private-key <hex> [--out path] [--expires ISO]
   peranto did delegate add <address> [--type svc|sigAuth|veriKey] [--days 365] --private-key <hex>
   peranto did delegate revoke <address> [--type svc|sigAuth|veriKey] --private-key <hex>
   peranto schema register <schemaKey> <uri> --private-key <hex> [--rpc url]
   peranto attester join <schemaKey> --private-key <hex> [--stake wei]
+  peranto attester add-schema <schemaKey> --private-key <hex>
+  peranto attester ensure <schemaKey> --private-key <hex> [--stake wei]
+  peranto attester authorize <address> <schemaKey> --private-key <hex>
+  peranto attester revoke-auth <address> <schemaKey> --private-key <hex>
   peranto vc issue --private-key <hex> --subject <address> --sample <id> --type <t> --result <r> --unit <u> --lab <name>
+  peranto vc issue-liveness --private-key <hex> --subject <address> [--provider name] [--score n] [--days 30]
+  peranto vc issue-residence --private-key <hex> --subject <address> --country XX [--doc-type utility|lease|tax_notice|bank_statement|other] [--days-old 30] [--provider name] [--region name] [--days 90]
   peranto vc verify <jwt-file-or-string> --rpc optional
   peranto vc revoke <credHash> --private-key <hex> --reason <text>
   peranto name register <label> --private-key <hex>
   peranto name resolve <label>
   peranto disco create <name> --private-key <hex>
-  peranto disco tip <node> <to> --value <wei|ether> --private-key <hex>
-  peranto disco contribute <node> --value <wei|ether> --private-key <hex>
-  peranto disco harvest <node> <periodId> --private-key <hex>
-  peranto disco distribute <periodId> --private-key <hex>
+  peranto disco tip <node> <to> --value <wei|ether> [--token 0x…] --private-key <hex>
+  peranto disco contribute <node> --value <wei|ether> [--token 0x…] --private-key <hex>
+  peranto disco harvest <node> <periodId> [--token 0x…] --private-key <hex>
+  peranto disco distribute <periodId> [--token 0x…] --private-key <hex>
   peranto disco scores <node> <account>
   peranto disco member add <node> <account> --private-key <hex>
   peranto disco dissolve <node> [--to 0x…] --private-key <hex>
@@ -154,6 +162,42 @@ async function main() {
     return;
   }
 
+  if (cmd === "did-config" && sub === "create") {
+    const origin = arg("--origin", argv);
+    if (!origin) usage();
+    const c = client(argv, true);
+    const expires = arg("--expires", argv);
+    const res = await c.createDidConfigurationForOrigin({
+      origin: origin!,
+      expirationDate: expires,
+    });
+    const out =
+      arg("--out", argv) ||
+      path.resolve(process.cwd(), ".peranto", "did-configuration.json");
+    fs.mkdirSync(path.dirname(out), { recursive: true });
+    fs.writeFileSync(out, JSON.stringify(res.didConfiguration, null, 2));
+    const jwtFile = path.join(
+      path.dirname(out),
+      `domain-linkage-${res.issued.credHash.slice(2, 10)}.jwt`
+    );
+    fs.writeFileSync(jwtFile, res.issued.jwt);
+    console.log(
+      JSON.stringify(
+        {
+          issuerDid: res.issued.issuerDid,
+          origin: res.issued.origin,
+          wellKnownPath: res.wellKnownPath,
+          didConfigurationFile: out,
+          jwtFile,
+          note: `Host ${out} at ${res.wellKnownPath} with Access-Control-Allow-Origin: *`,
+        },
+        null,
+        2
+      )
+    );
+    return;
+  }
+
   if (cmd === "did" && sub === "delegate") {
     const action = rest[0];
     const delegate = rest[1] as Address;
@@ -209,6 +253,58 @@ async function main() {
     return;
   }
 
+  if (cmd === "attester" && sub === "add-schema") {
+    const schemaKey = rest[0];
+    if (!schemaKey) usage();
+    const c = client(argv, true);
+    const res = await c.addSchema(schemaKey!);
+    console.log(JSON.stringify({ ...res, attester: c.accountAddress }, null, 2));
+    return;
+  }
+
+  if (cmd === "attester" && sub === "ensure") {
+    const schemaKey = rest[0];
+    if (!schemaKey) usage();
+    const stake = arg("--stake", argv);
+    const c = client(argv, true);
+    const res = await c.ensureAttesterForSchema(
+      schemaKey!,
+      stake !== undefined ? BigInt(stake) : undefined
+    );
+    console.log(
+      JSON.stringify(
+        {
+          ...res,
+          stake: res.stake?.toString(),
+          attester: c.accountAddress,
+        },
+        null,
+        2
+      )
+    );
+    return;
+  }
+
+  if (cmd === "attester" && sub === "authorize") {
+    const attester = rest[0] as Address;
+    const schemaKey = rest[1];
+    if (!attester || !schemaKey) usage();
+    const c = client(argv, true);
+    const res = await c.authorizeAttester(attester, schemaKey!);
+    console.log(JSON.stringify(res, null, 2));
+    return;
+  }
+
+  if (cmd === "attester" && (sub === "revoke-auth" || sub === "revokeAuth")) {
+    const attester = rest[0] as Address;
+    const schemaKey = rest[1];
+    if (!attester || !schemaKey) usage();
+    const c = client(argv, true);
+    const res = await c.revokeAttester(attester, schemaKey!);
+    console.log(JSON.stringify(res, null, 2));
+    return;
+  }
+
   if (cmd === "vc" && sub === "issue") {
     const subject = arg("--subject", argv);
     if (!subject) usage();
@@ -228,6 +324,98 @@ async function main() {
     console.log(
       JSON.stringify(
         {
+          issuerDid: issued.issuerDid,
+          subjectDid: issued.subjectDid,
+          credHash: issued.credHash,
+          anchorTx: issued.anchorTx,
+          jwtFile: file,
+        },
+        null,
+        2
+      )
+    );
+    return;
+  }
+
+  if (cmd === "vc" && sub === "issue-liveness") {
+    const subject = arg("--subject", argv);
+    if (!subject) usage();
+    const days = Number(arg("--days", argv) || "30");
+    const checkedAt = new Date();
+    const expiresAt = new Date(checkedAt.getTime() + days * 86400_000);
+    const c = client(argv, true);
+    const schemaKey = "peranto:LivenessCheck:v1";
+    const issued = await c.issueAndAnchorClaims(
+      subject as `0x${string}`,
+      {
+        provider: arg("--provider", argv) || "demo-provider",
+        score: Number(arg("--score", argv) || "0.98"),
+        checkedAt: checkedAt.toISOString(),
+        expiresAt: expiresAt.toISOString(),
+        subjectDid: formatDid(networkFrom(argv), subject as `0x${string}`),
+      },
+      schemaKey,
+      "LivenessCheck"
+    );
+    const dir = path.resolve(process.cwd(), ".peranto");
+    fs.mkdirSync(dir, { recursive: true });
+    const file = path.join(dir, `vc-liveness-${issued.credHash.slice(2, 10)}.jwt`);
+    fs.writeFileSync(file, issued.jwt);
+    console.log(
+      JSON.stringify(
+        {
+          schemaKey,
+          issuerDid: issued.issuerDid,
+          subjectDid: issued.subjectDid,
+          credHash: issued.credHash,
+          anchorTx: issued.anchorTx,
+          jwtFile: file,
+        },
+        null,
+        2
+      )
+    );
+    return;
+  }
+
+  if (cmd === "vc" && sub === "issue-residence") {
+    const subject = arg("--subject", argv);
+    const country = (arg("--country", argv) || "").toUpperCase();
+    if (!subject || country.length !== 2) usage();
+    const days = Number(arg("--days", argv) || "90");
+    const checkedAt = new Date();
+    const expiresAt = new Date(checkedAt.getTime() + days * 86400_000);
+    const docType = arg("--doc-type", argv) || "utility";
+    const c = client(argv, true);
+    const schemaKey = "peranto:ProofOfResidence:v1";
+    const claims: Record<string, unknown> = {
+      country,
+      docType,
+      issuedWithinDays: Number(arg("--days-old", argv) || "30"),
+      checkedAt: checkedAt.toISOString(),
+      expiresAt: expiresAt.toISOString(),
+      provider: arg("--provider", argv) || "demo-provider",
+      subjectDid: formatDid(networkFrom(argv), subject as `0x${string}`),
+    };
+    const region = arg("--region", argv);
+    if (region) claims.region = region;
+    const issued = await c.issueAndAnchorClaims(
+      subject as `0x${string}`,
+      claims,
+      schemaKey,
+      "ProofOfResidence"
+    );
+    const dir = path.resolve(process.cwd(), ".peranto");
+    fs.mkdirSync(dir, { recursive: true });
+    const file = path.join(
+      dir,
+      `vc-residence-${issued.credHash.slice(2, 10)}.jwt`
+    );
+    fs.writeFileSync(file, issued.jwt);
+    console.log(
+      JSON.stringify(
+        {
+          schemaKey,
           issuerDid: issued.issuerDid,
           subjectDid: issued.subjectDid,
           credHash: issued.credHash,
@@ -320,12 +508,13 @@ async function main() {
     const to = rest[1] as Address;
     const valueRaw = arg("--value", argv);
     if (!node || !to || !valueRaw) usage();
+    const token = (arg("--token", argv) ?? NATIVE_TOKEN) as Address;
     const c = client(argv, true);
     const value = valueRaw!.includes(".")
       ? parseEther(valueRaw!)
       : BigInt(valueRaw!);
-    const tx = await c.tip(node, to, value);
-    console.log(JSON.stringify({ tx, node, to, value: value.toString() }, null, 2));
+    const tx = await c.tip(node, to, value, token);
+    console.log(JSON.stringify({ tx, node, to, value: value.toString(), token }, null, 2));
     return;
   }
 
@@ -333,12 +522,13 @@ async function main() {
     const node = rest[0] as Address;
     const valueRaw = arg("--value", argv);
     if (!node || !valueRaw) usage();
+    const token = (arg("--token", argv) ?? NATIVE_TOKEN) as Address;
     const c = client(argv, true);
     const value = valueRaw!.includes(".")
       ? parseEther(valueRaw!)
       : BigInt(valueRaw!);
-    const tx = await c.contribute(node, value);
-    console.log(JSON.stringify({ tx, node, value: value.toString() }, null, 2));
+    const tx = await c.contribute(node, value, token);
+    console.log(JSON.stringify({ tx, node, value: value.toString(), token }, null, 2));
     return;
   }
 
@@ -346,18 +536,20 @@ async function main() {
     const node = rest[0] as Address;
     const periodId = rest[1];
     if (!node || periodId === undefined) usage();
+    const token = (arg("--token", argv) ?? NATIVE_TOKEN) as Address;
     const c = client(argv, true);
-    const tx = await c.harvest(node, BigInt(periodId!));
-    console.log(JSON.stringify({ tx, node, periodId }, null, 2));
+    const tx = await c.harvest(node, BigInt(periodId!), token);
+    console.log(JSON.stringify({ tx, node, periodId, token }, null, 2));
     return;
   }
 
   if (cmd === "disco" && sub === "distribute") {
     const periodId = rest[0];
     if (periodId === undefined) usage();
+    const token = (arg("--token", argv) ?? NATIVE_TOKEN) as Address;
     const c = client(argv, true);
-    const tx = await c.distribute(BigInt(periodId!));
-    console.log(JSON.stringify({ tx, periodId }, null, 2));
+    const tx = await c.distribute(BigInt(periodId!), token);
+    console.log(JSON.stringify({ tx, periodId, token }, null, 2));
     return;
   }
 
