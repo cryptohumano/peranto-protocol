@@ -24,10 +24,13 @@ import {
   didRegistryAbi,
   disCOFactoryAbi,
   disCONodeAbi,
+  erc20PaymentAbi,
   nameRegistryAbi,
+  NATIVE_TOKEN,
   protocolTreasuryAbi,
   schemaRegistryAbi,
 } from "./abi";
+export { NATIVE_TOKEN } from "./abi";
 import {
   NETWORK_CHAIN_ID,
   DID_SERVICE_DEFAULT_VALIDITY,
@@ -66,6 +69,12 @@ import {
   type IssuedCredential,
 } from "./vc";
 import {
+  createDidConfigurationForOrigin,
+  verifyDomainLinkage,
+  type DomainLinkageVerifyResult,
+  type VerifyDomainLinkageOptions,
+} from "./domain-linkage";
+import {
   derivePurposeKeys,
   type PurposeKeys,
 } from "./wallet";
@@ -91,6 +100,7 @@ export type ContractAddresses = {
   DisCOFactory?: Address;
   PerantoNode?: Address | null;
   EcosystemLabNode?: Address | null;
+  ComplianceZkVerifier?: Address;
 };
 
 /** Options for log-based DID service reconstruction. */
@@ -791,7 +801,52 @@ export class PerantoClient {
     return { schemaId, schemaHash, txHash: hash };
   }
 
-  async stakeAndJoin(schemaKey: string, stakeWei?: bigint) {
+  /** Ensure ERC-20 allowance for `spender`; no-op for native token. */
+  async ensureAllowance(
+    token: Address,
+    spender: Address,
+    amount: bigint
+  ): Promise<Hex | undefined> {
+    if (token.toLowerCase() === NATIVE_TOKEN.toLowerCase() || amount === 0n) {
+      return undefined;
+    }
+    this.requireWallet();
+    const owner = this.walletClient!.account!.address;
+    const allowance = await this.publicClient.readContract({
+      address: token,
+      abi: erc20PaymentAbi,
+      functionName: "allowance",
+      args: [owner, spender],
+    });
+    if (allowance >= amount) return undefined;
+    const hash = await this.writeContract({
+      address: token,
+      abi: erc20PaymentAbi,
+      functionName: "approve",
+      args: [spender, amount],
+      chain: chainFor(this.network),
+      account: this.walletClient!.account!,
+    });
+    await this.publicClient.waitForTransactionReceipt({ hash });
+    return hash;
+  }
+
+  async listPaymentTokens(): Promise<Address[]> {
+    const treasury = this.requireTreasury();
+    return [
+      ...(await this.publicClient.readContract({
+        address: treasury,
+        abi: protocolTreasuryAbi,
+        functionName: "getAllowedTokens",
+      })),
+    ];
+  }
+
+  async stakeAndJoin(
+    schemaKey: string,
+    stakeWei?: bigint,
+    token: Address = NATIVE_TOKEN as Address
+  ) {
     this.requireWallet();
     const schemaId = schemaIdFromKey(schemaKey);
     const minStake =
@@ -800,18 +855,194 @@ export class PerantoClient {
         address: this.addresses.AttesterRegistry,
         abi: attesterRegistryAbi,
         functionName: "minStake",
+        args: [token],
       }));
+    const isNative = token.toLowerCase() === NATIVE_TOKEN.toLowerCase();
+    if (!isNative) {
+      await this.ensureAllowance(
+        token,
+        this.addresses.AttesterRegistry,
+        minStake
+      );
+    }
     const hash = await this.writeContract({
       address: this.addresses.AttesterRegistry,
       abi: attesterRegistryAbi,
       functionName: "stakeAndJoin",
-      args: [schemaId],
-      value: minStake,
+      args: [schemaId, token, minStake],
+      value: isNative ? minStake : 0n,
       chain: chainFor(this.network),
       account: this.walletClient!.account!,
     });
     await this.publicClient.waitForTransactionReceipt({ hash });
-    return { schemaId, txHash: hash, stake: minStake };
+    return { schemaId, txHash: hash, stake: minStake, token };
+  }
+
+  /**
+   * Link another schema without extra stake (requires min stake already met,
+   * including when minStake is 0).
+   */
+  async addSchema(schemaKey: string) {
+    this.requireWallet();
+    const schemaId = schemaIdFromKey(schemaKey);
+    const hash = await this.writeContract({
+      address: this.addresses.AttesterRegistry,
+      abi: attesterRegistryAbi,
+      functionName: "addSchema",
+      args: [schemaId],
+      chain: chainFor(this.network),
+      account: this.walletClient!.account!,
+    });
+    await this.publicClient.waitForTransactionReceipt({ hash });
+    return { schemaId, txHash: hash };
+  }
+
+  /** Governance: authorize attester for a schema without stake. */
+  async authorizeAttester(attester: Address, schemaKey: string) {
+    this.requireWallet();
+    const schemaId = schemaIdFromKey(schemaKey);
+    const hash = await this.writeContract({
+      address: this.addresses.AttesterRegistry,
+      abi: attesterRegistryAbi,
+      functionName: "authorizeAttester",
+      args: [attester, schemaId],
+      chain: chainFor(this.network),
+      account: this.walletClient!.account!,
+    });
+    await this.publicClient.waitForTransactionReceipt({ hash });
+    return { schemaId, txHash: hash, attester };
+  }
+
+  /** Governance: revoke attester authorization for a schema. */
+  async revokeAttester(attester: Address, schemaKey: string) {
+    this.requireWallet();
+    const schemaId = schemaIdFromKey(schemaKey);
+    const hash = await this.writeContract({
+      address: this.addresses.AttesterRegistry,
+      abi: attesterRegistryAbi,
+      functionName: "revokeAttester",
+      args: [attester, schemaId],
+      chain: chainFor(this.network),
+      account: this.walletClient!.account!,
+    });
+    await this.publicClient.waitForTransactionReceipt({ hash });
+    return { schemaId, txHash: hash, attester };
+  }
+
+  async getMinStake(
+    token: Address = NATIVE_TOKEN as Address
+  ): Promise<bigint> {
+    return this.publicClient.readContract({
+      address: this.addresses.AttesterRegistry,
+      abi: attesterRegistryAbi,
+      functionName: "minStake",
+      args: [token],
+    });
+  }
+
+  async getAttesterStake(
+    attester: Address,
+    token: Address = NATIVE_TOKEN as Address
+  ): Promise<bigint> {
+    return this.publicClient.readContract({
+      address: this.addresses.AttesterRegistry,
+      abi: attesterRegistryAbi,
+      functionName: "stakeOf",
+      args: [attester, token],
+    });
+  }
+
+  async getUnbondDelay(): Promise<bigint> {
+    return this.publicClient.readContract({
+      address: this.addresses.AttesterRegistry,
+      abi: attesterRegistryAbi,
+      functionName: "unbondDelay",
+    });
+  }
+
+  async getUnbondReleaseAt(attester: Address): Promise<bigint> {
+    return this.publicClient.readContract({
+      address: this.addresses.AttesterRegistry,
+      abi: attesterRegistryAbi,
+      functionName: "unbondReleaseAt",
+      args: [attester],
+    });
+  }
+
+  async startUnbond() {
+    this.requireWallet();
+    const hash = await this.writeContract({
+      address: this.addresses.AttesterRegistry,
+      abi: attesterRegistryAbi,
+      functionName: "startUnbond",
+      args: [],
+      chain: chainFor(this.network),
+      account: this.walletClient!.account!,
+    });
+    await this.publicClient.waitForTransactionReceipt({ hash });
+    return { txHash: hash };
+  }
+
+  async withdrawAttesterStake(
+    token: Address = NATIVE_TOKEN as Address
+  ) {
+    this.requireWallet();
+    const hash = await this.writeContract({
+      address: this.addresses.AttesterRegistry,
+      abi: attesterRegistryAbi,
+      functionName: "withdraw",
+      args: [token],
+      chain: chainFor(this.network),
+      account: this.walletClient!.account!,
+    });
+    await this.publicClient.waitForTransactionReceipt({ hash });
+    return { txHash: hash, token };
+  }
+
+  /**
+   * Ensure this wallet can anchor `schemaKey`: no-op if already authorized;
+   * otherwise `addSchema` when min stake is met, else `stakeAndJoin`.
+   */
+  async ensureAttesterForSchema(
+    schemaKey: string,
+    stakeWei?: bigint,
+    token: Address = NATIVE_TOKEN as Address
+  ): Promise<{
+    schemaKey: string;
+    schemaId: Hex;
+    skipped: boolean;
+    via: "existing" | "addSchema" | "stakeAndJoin";
+    txHash?: Hex;
+    stake?: bigint;
+  }> {
+    this.requireWallet();
+    const me = this.accountAddress!;
+    const schemaId = schemaIdFromKey(schemaKey);
+    if (await this.isAuthorized(me, schemaKey)) {
+      return { schemaKey, schemaId, skipped: true, via: "existing" };
+    }
+    const minStake = stakeWei ?? (await this.getMinStake(token));
+    const stake = await this.getAttesterStake(me, token);
+    if (stake >= minStake) {
+      const res = await this.addSchema(schemaKey);
+      return {
+        schemaKey,
+        schemaId,
+        skipped: false,
+        via: "addSchema",
+        txHash: res.txHash,
+        stake,
+      };
+    }
+    const joined = await this.stakeAndJoin(schemaKey, stakeWei, token);
+    return {
+      schemaKey,
+      schemaId,
+      skipped: false,
+      via: "stakeAndJoin",
+      txHash: joined.txHash,
+      stake: joined.stake,
+    };
   }
 
   async isAuthorized(attester: Address, schemaKey: string): Promise<boolean> {
@@ -836,12 +1067,18 @@ export class PerantoClient {
     );
   }
 
-  /** Emit + anchor any schema (Member, CommonsWork, Care, custom). */
+  /** Emit + anchor any schema (Member, CommonsWork, Care, compliance, custom). */
   async issueAndAnchorClaims(
     subject: Address,
     claims: Record<string, unknown>,
     schemaKey: string,
-    credentialType?: string
+    credentialType?: string,
+    opts?: {
+      paymentToken?: Address;
+      /** Unix seconds; with claimsCommitment uses anchorV2 */
+      validUntil?: number | bigint;
+      claimsCommitment?: Hex;
+    }
   ): Promise<IssuedCredential & { anchorTx: Hex }> {
     this.requireWallet();
     const controller = this.accountAddress!;
@@ -887,21 +1124,49 @@ export class PerantoClient {
       },
     });
 
-    const fee = await this.publicClient.readContract({
-      address: this.addresses.CredentialStatusRegistry,
-      abi: credentialStatusAbi,
-      functionName: "anchorFee",
-    });
+    const token = (opts?.paymentToken ?? NATIVE_TOKEN) as Address;
+    const fee = await this.getAnchorFee(token);
+    const isNative = token.toLowerCase() === NATIVE_TOKEN.toLowerCase();
+    if (!isNative && fee > 0n) {
+      await this.ensureAllowance(
+        token,
+        this.addresses.CredentialStatusRegistry,
+        fee
+      );
+    }
 
-    const hash = await this.writeContract({
-      address: this.addresses.CredentialStatusRegistry,
-      abi: credentialStatusAbi,
-      functionName: "anchor",
-      args: [issued.credHash, schemaIdFromKey(schemaKey), subject],
-      value: fee,
-      chain: chainFor(this.network),
-      account: this.walletClient!.account!,
-    });
+    const useV2 =
+      opts?.validUntil != null &&
+      opts.validUntil !== 0 &&
+      Boolean(opts.claimsCommitment);
+
+    const hash = useV2
+      ? await this.writeContract({
+          address: this.addresses.CredentialStatusRegistry,
+          abi: credentialStatusAbi,
+          functionName: "anchorV2",
+          args: [
+            issued.credHash,
+            schemaIdFromKey(schemaKey),
+            subject,
+            BigInt(opts!.validUntil!),
+            opts!.claimsCommitment!,
+            token,
+            fee,
+          ],
+          value: isNative ? fee : 0n,
+          chain: chainFor(this.network),
+          account: this.walletClient!.account!,
+        })
+      : await this.writeContract({
+          address: this.addresses.CredentialStatusRegistry,
+          abi: credentialStatusAbi,
+          functionName: "anchor",
+          args: [issued.credHash, schemaIdFromKey(schemaKey), subject, token, fee],
+          value: isNative ? fee : 0n,
+          chain: chainFor(this.network),
+          account: this.walletClient!.account!,
+        });
     await this.publicClient.waitForTransactionReceipt({ hash });
     return { ...issued, anchorTx: hash };
   }
@@ -909,6 +1174,7 @@ export class PerantoClient {
   async verifyCredential(jwt: string): Promise<{
     jwtValid: boolean;
     onChainStatus: number;
+    onChainValid: boolean;
     authorized: boolean;
     details: Awaited<ReturnType<typeof verifyEcoTestJwt>>;
     status: {
@@ -917,6 +1183,8 @@ export class PerantoClient {
       schemaId: Hex;
       subject: Address;
       anchoredAt: bigint;
+      validUntil: bigint;
+      claimsCommitment: Hex;
       revokeReason: string;
     };
   }> {
@@ -943,6 +1211,7 @@ export class PerantoClient {
       return {
         jwtValid: false,
         onChainStatus: 0,
+        onChainValid: false,
         authorized: false,
         details,
         status: {
@@ -951,6 +1220,8 @@ export class PerantoClient {
           schemaId: ("0x" + "00".repeat(32)) as Hex,
           subject: "0x0000000000000000000000000000000000000000",
           anchoredAt: 0n,
+          validUntil: 0n,
+          claimsCommitment: ("0x" + "00".repeat(32)) as Hex,
           revokeReason: "",
         },
       };
@@ -959,7 +1230,7 @@ export class PerantoClient {
     const statusTuple = await this.publicClient.readContract({
       address: this.addresses.CredentialStatusRegistry,
       abi: credentialStatusAbi,
-      functionName: "status",
+      functionName: "statusV2",
       args: [details.credHash],
     });
 
@@ -969,8 +1240,24 @@ export class PerantoClient {
       schemaId: statusTuple[2],
       subject: statusTuple[3],
       anchoredAt: statusTuple[4],
-      revokeReason: statusTuple[5],
+      validUntil: statusTuple[5],
+      claimsCommitment: statusTuple[6],
+      revokeReason: statusTuple[7],
     };
+
+    let onChainValid = false;
+    try {
+      onChainValid = Boolean(
+        await this.publicClient.readContract({
+          address: this.addresses.CredentialStatusRegistry,
+          abi: credentialStatusAbi,
+          functionName: "isValid",
+          args: [details.credHash],
+        })
+      );
+    } catch {
+      onChainValid = status.st === 1;
+    }
 
     const schemaKey =
       ((details.vc.credentialSchema as { id?: string } | undefined)?.id) ??
@@ -981,10 +1268,102 @@ export class PerantoClient {
     return {
       jwtValid: true,
       onChainStatus: status.st,
+      onChainValid,
       authorized,
       details,
       status,
     };
+  }
+
+  async isCredentialValid(credHash: Hex): Promise<boolean> {
+    return Boolean(
+      await this.publicClient.readContract({
+        address: this.addresses.CredentialStatusRegistry,
+        abi: credentialStatusAbi,
+        functionName: "isValid",
+        args: [credHash],
+      })
+    );
+  }
+
+  async getCredentialStatusV2(credHash: Hex) {
+    const t = await this.publicClient.readContract({
+      address: this.addresses.CredentialStatusRegistry,
+      abi: credentialStatusAbi,
+      functionName: "statusV2",
+      args: [credHash],
+    });
+    return {
+      st: Number(t[0]),
+      attester: t[1],
+      schemaId: t[2],
+      subject: t[3],
+      anchoredAt: t[4],
+      validUntil: t[5],
+      claimsCommitment: t[6],
+      revokeReason: t[7],
+    };
+  }
+
+  /**
+   * Verify DIF Well-Known DID Configuration for a page origin
+   * (docs/well-known-did-configuration.md). Resolves issuer DID for assertion keys.
+   */
+  async verifyDomainLinkage(
+    pageOrigin: string,
+    opts: Omit<VerifyDomainLinkageOptions, "resolveDid"> = {}
+  ): Promise<DomainLinkageVerifyResult> {
+    return verifyDomainLinkage(pageOrigin, {
+      ...opts,
+      resolveDid: (did) => this.resolveDid(did),
+    });
+  }
+
+  /**
+   * Issue DomainLinkageCredential + did-configuration.json for an origin.
+   * Operator hosts the JSON at `/.well-known/did-configuration.json`.
+   */
+  async createDidConfigurationForOrigin(params: {
+    origin: string;
+    expirationDate?: string;
+  }) {
+    this.requireWallet();
+    const controller = this.accountAddress!;
+    let signingKey = this.privateKey!;
+    let kid: string | undefined;
+    let issuerDidAddress: Address | undefined;
+
+    if (this.assertionPrivateKey) {
+      signingKey = this.assertionPrivateKey;
+      issuerDidAddress = controller;
+      kid = `${formatDid(this.network, controller)}#key-assertion`;
+    } else if (this.mnemonic) {
+      try {
+        const doc = await this.resolveDid(
+          formatDid(this.network, controller)
+        );
+        const hasAssertVm = doc.assertionMethod.some((id) =>
+          id.includes("#key-assertion")
+        );
+        if (hasAssertVm) {
+          const keys = await derivePurposeKeys(this.mnemonic, this.network);
+          signingKey = keys.assertion.privateKey;
+          issuerDidAddress = controller;
+          kid = `${formatDid(this.network, controller)}#key-assertion`;
+        }
+      } catch {
+        /* controller key */
+      }
+    }
+
+    return createDidConfigurationForOrigin({
+      issuerPrivateKey: signingKey,
+      network: this.network,
+      origin: params.origin,
+      issuerDidAddress,
+      kid,
+      expirationDate: params.expirationDate,
+    });
   }
 
   async revoke(credHash: Hex, reason: string) {
@@ -1001,7 +1380,7 @@ export class PerantoClient {
     return hash;
   }
 
-  async registerName(label: string) {
+  async registerName(label: string, token: Address = NATIVE_TOKEN as Address) {
     this.requireWallet();
     if (!this.addresses.NameRegistry) {
       throw new Error("NameRegistry not in deployment");
@@ -1010,13 +1389,18 @@ export class PerantoClient {
       address: this.addresses.NameRegistry,
       abi: nameRegistryAbi,
       functionName: "registrationFee",
+      args: [token],
     });
+    const isNative = token.toLowerCase() === NATIVE_TOKEN.toLowerCase();
+    if (!isNative && fee > 0n) {
+      await this.ensureAllowance(token, this.addresses.NameRegistry, fee);
+    }
     const hash = await this.writeContract({
       address: this.addresses.NameRegistry,
       abi: nameRegistryAbi,
       functionName: "register",
-      args: [label],
-      value: fee,
+      args: [label, token, fee],
+      value: isNative ? fee : 0n,
       chain: chainFor(this.network),
       account: this.walletClient!.account!,
     });
@@ -1026,6 +1410,7 @@ export class PerantoClient {
       owner: this.accountAddress!,
       did: formatDid(this.network, this.accountAddress!),
       txHash: hash,
+      token,
     };
   }
 
@@ -1207,18 +1592,27 @@ export class PerantoClient {
     };
   }
 
-  async tip(node: Address, to: Address, valueWei: bigint) {
+  async tip(
+    node: Address,
+    to: Address,
+    valueWei: bigint,
+    token: Address = NATIVE_TOKEN as Address
+  ) {
     this.requireWallet();
     const from = this.walletClient!.account!.address;
     if (from.toLowerCase() === to.toLowerCase()) {
       throw new Error("No puedes tiparte a ti mismo (Care/Love requieren otro peer)");
     }
+    const isNative = token.toLowerCase() === NATIVE_TOKEN.toLowerCase();
+    if (!isNative) {
+      await this.ensureAllowance(token, node, valueWei);
+    }
     const hash = await this.writeContract({
       address: node,
       abi: disCONodeAbi,
       functionName: "tip",
-      args: [to],
-      value: valueWei,
+      args: [to, token, valueWei],
+      value: isNative ? valueWei : 0n,
       chain: chainFor(this.network),
       account: this.walletClient!.account!,
     });
@@ -1226,14 +1620,22 @@ export class PerantoClient {
     return hash;
   }
 
-  async contribute(node: Address, valueWei: bigint) {
+  async contribute(
+    node: Address,
+    valueWei: bigint,
+    token: Address = NATIVE_TOKEN as Address
+  ) {
     this.requireWallet();
+    const isNative = token.toLowerCase() === NATIVE_TOKEN.toLowerCase();
+    if (!isNative) {
+      await this.ensureAllowance(token, node, valueWei);
+    }
     const hash = await this.writeContract({
       address: node,
       abi: disCONodeAbi,
       functionName: "contribute",
-      args: [],
-      value: valueWei,
+      args: [token, valueWei],
+      value: isNative ? valueWei : 0n,
       chain: chainFor(this.network),
       account: this.walletClient!.account!,
     });
@@ -1241,13 +1643,17 @@ export class PerantoClient {
     return hash;
   }
 
-  async harvest(node: Address, periodId: bigint) {
+  async harvest(
+    node: Address,
+    periodId: bigint,
+    token: Address = NATIVE_TOKEN as Address
+  ) {
     this.requireWallet();
     const hash = await this.writeContract({
       address: node,
       abi: disCONodeAbi,
       functionName: "harvest",
-      args: [periodId],
+      args: [periodId, token],
       chain: chainFor(this.network),
       account: this.walletClient!.account!,
     });
@@ -1255,14 +1661,17 @@ export class PerantoClient {
     return hash;
   }
 
-  async distribute(periodId: bigint) {
+  async distribute(
+    periodId: bigint,
+    token: Address = NATIVE_TOKEN as Address
+  ) {
     this.requireWallet();
     const treasury = this.requireTreasury();
     const hash = await this.writeContract({
       address: treasury,
       abi: protocolTreasuryAbi,
       functionName: "distribute",
-      args: [periodId],
+      args: [periodId, token],
       chain: chainFor(this.network),
       account: this.walletClient!.account!,
     });
@@ -1298,13 +1707,18 @@ export class PerantoClient {
     return hash;
   }
 
-  async withdrawNode(node: Address, to: Address, amountWei: bigint) {
+  async withdrawNode(
+    node: Address,
+    to: Address,
+    amountWei: bigint,
+    token: Address = NATIVE_TOKEN as Address
+  ) {
     this.requireWallet();
     const hash = await this.writeContract({
       address: node,
       abi: disCONodeAbi,
       functionName: "withdraw",
-      args: [to, amountWei],
+      args: [to, token, amountWei],
       chain: chainFor(this.network),
       account: this.walletClient!.account!,
     });
@@ -1921,6 +2335,17 @@ export class PerantoClient {
     };
   }
 
+  async getAnchorFee(
+    token: Address = NATIVE_TOKEN as Address
+  ): Promise<bigint> {
+    return this.publicClient.readContract({
+      address: this.addresses.CredentialStatusRegistry,
+      abi: credentialStatusAbi,
+      functionName: "anchorFee",
+      args: [token],
+    });
+  }
+
   async schemaExists(schemaKey: string): Promise<boolean> {
     return this.publicClient.readContract({
       address: this.addresses.SchemaRegistry,
@@ -1928,6 +2353,55 @@ export class PerantoClient {
       functionName: "schemaExists",
       args: [schemaIdFromKey(schemaKey)],
     });
+  }
+
+  async getSchema(schemaKey: string): Promise<{
+    schemaId: Hex;
+    schemaHash: Hex;
+    uri: string;
+    publisher: Address;
+    registeredAt: bigint;
+    exists: boolean;
+  }> {
+    const schemaId = schemaIdFromKey(schemaKey);
+    const row = await this.publicClient.readContract({
+      address: this.addresses.SchemaRegistry,
+      abi: schemaRegistryAbi,
+      functionName: "getSchema",
+      args: [schemaId],
+    });
+    return {
+      schemaId,
+      schemaHash: row[0],
+      uri: row[1],
+      publisher: row[2],
+      registeredAt: row[3],
+      exists: row[4],
+    };
+  }
+
+  async isSchemaPublisher(publisher: Address): Promise<boolean> {
+    return this.publicClient.readContract({
+      address: this.addresses.SchemaRegistry,
+      abi: schemaRegistryAbi,
+      functionName: "publishers",
+      args: [publisher],
+    });
+  }
+
+  /** Governance: allow/deny an address to register schemas. */
+  async setSchemaPublisher(publisher: Address, allowed: boolean) {
+    this.requireWallet();
+    const hash = await this.writeContract({
+      address: this.addresses.SchemaRegistry,
+      abi: schemaRegistryAbi,
+      functionName: "setPublisher",
+      args: [publisher, allowed],
+      chain: chainFor(this.network),
+      account: this.walletClient!.account!,
+    });
+    await this.publicClient.waitForTransactionReceipt({ hash });
+    return { txHash: hash, publisher, allowed };
   }
 
   /**
@@ -2081,7 +2555,7 @@ export class PerantoClient {
       address: treasury,
       abi: protocolTreasuryAbi,
       functionName: "distributed",
-      args: [currentPeriod],
+      args: [currentPeriod, NATIVE_TOKEN as Address],
     });
 
     let incomeWei = 0n;
@@ -2150,6 +2624,7 @@ export class PerantoClient {
         address: node,
         abi: disCONodeAbi,
         functionName: "reserveFloor",
+        args: [NATIVE_TOKEN as Address],
       }),
       this.publicClient.readContract({
         address: node,
