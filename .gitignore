@@ -14,3 +14,6 @@ coverage/
 .DS_Store
 packages/extension/*.zip
 packages/extension/dist/
+
+# Ensayos y borradores personales (no versionar)
+ensayos/

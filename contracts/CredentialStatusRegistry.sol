@@ -1,8 +1,14 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
+import {PaymentLib} from "./libs/PaymentLib.sol";
+
 interface IAttesterRegistry {
     function isAuthorized(address attester, bytes32 schemaId) external view returns (bool);
+}
+
+interface ITokenAllowlist {
+    function isTokenAllowed(address token) external view returns (bool);
 }
 
 /// @title CredentialStatusRegistry — on-chain anchor / revoke for off-chain VCs
@@ -19,24 +25,35 @@ contract CredentialStatusRegistry {
         bytes32 schemaId;
         address subject;
         uint64 anchoredAt;
+        uint64 validUntil;
+        bytes32 claimsCommitment;
         string revokeReason;
     }
 
     IAttesterRegistry public immutable attesterRegistry;
     address public governance;
     address public treasury;
-    uint256 public anchorFee;
+    /// @dev Per-token anchor fee (native = address(0))
+    mapping(address => uint256) public anchorFee;
 
     mapping(bytes32 => Record) private records;
 
     event GovernanceUpdated(address indexed previous, address indexed next);
     event TreasuryUpdated(address indexed previous, address indexed next);
-    event AnchorFeeUpdated(uint256 previous, uint256 next);
+    event AnchorFeeUpdated(address indexed token, uint256 previous, uint256 next);
     event CredentialAnchored(
         bytes32 indexed credHash,
         bytes32 indexed schemaId,
         address indexed attester,
         address subject
+    );
+    event CredentialAnchoredV2(
+        bytes32 indexed credHash,
+        bytes32 indexed schemaId,
+        address indexed attester,
+        address subject,
+        uint64 validUntil,
+        bytes32 claimsCommitment
     );
     event CredentialRevoked(bytes32 indexed credHash, address indexed attester, string reason);
 
@@ -57,7 +74,7 @@ contract CredentialStatusRegistry {
         attesterRegistry = IAttesterRegistry(attesterRegistry_);
         governance = governance_;
         treasury = treasury_;
-        anchorFee = anchorFee_;
+        anchorFee[PaymentLib.NATIVE] = anchorFee_;
     }
 
     function setGovernance(address next) external onlyGovernance {
@@ -72,12 +89,54 @@ contract CredentialStatusRegistry {
         treasury = next;
     }
 
-    function setAnchorFee(uint256 next) external onlyGovernance {
-        emit AnchorFeeUpdated(anchorFee, next);
-        anchorFee = next;
+    function setAnchorFee(address token, uint256 next) external onlyGovernance {
+        emit AnchorFeeUpdated(token, anchorFee[token], next);
+        anchorFee[token] = next;
     }
 
-    function anchor(bytes32 credHash, bytes32 schemaId, address subject) external payable {
+    /// @dev Back-compat: set native fee.
+    function setAnchorFee(uint256 next) external onlyGovernance {
+        emit AnchorFeeUpdated(PaymentLib.NATIVE, anchorFee[PaymentLib.NATIVE], next);
+        anchorFee[PaymentLib.NATIVE] = next;
+    }
+
+    /// @dev Legacy anchor (no expiry / commitment). validUntil=0 means no on-chain TTL.
+    function anchor(bytes32 credHash, bytes32 schemaId, address subject, address token, uint256 amount)
+        external
+        payable
+    {
+        _anchor(credHash, schemaId, subject, 0, bytes32(0), token, amount);
+        emit CredentialAnchored(credHash, schemaId, msg.sender, subject);
+    }
+
+    /// @dev Anchor with vigencia + claims commitment for ZK gates.
+    function anchorV2(
+        bytes32 credHash,
+        bytes32 schemaId,
+        address subject,
+        uint64 validUntil,
+        bytes32 claimsCommitment,
+        address token,
+        uint256 amount
+    ) external payable {
+        require(validUntil > block.timestamp, "CredentialStatus: validUntil past");
+        require(claimsCommitment != bytes32(0), "CredentialStatus: empty commitment");
+        _anchor(credHash, schemaId, subject, validUntil, claimsCommitment, token, amount);
+        emit CredentialAnchored(credHash, schemaId, msg.sender, subject);
+        emit CredentialAnchoredV2(
+            credHash, schemaId, msg.sender, subject, validUntil, claimsCommitment
+        );
+    }
+
+    function _anchor(
+        bytes32 credHash,
+        bytes32 schemaId,
+        address subject,
+        uint64 validUntil,
+        bytes32 claimsCommitment,
+        address token,
+        uint256 amount
+    ) internal {
         require(credHash != bytes32(0), "CredentialStatus: empty hash");
         require(subject != address(0), "CredentialStatus: zero subject");
         require(records[credHash].status == Status.None, "CredentialStatus: already anchored");
@@ -85,11 +144,14 @@ contract CredentialStatusRegistry {
             attesterRegistry.isAuthorized(msg.sender, schemaId),
             "CredentialStatus: not authorized"
         );
-        require(msg.value >= anchorFee, "CredentialStatus: fee");
+        require(ITokenAllowlist(treasury).isTokenAllowed(token), "CredentialStatus: token");
+        require(amount >= anchorFee[token], "CredentialStatus: fee");
 
-        if (msg.value > 0) {
-            (bool ok,) = treasury.call{value: msg.value}("");
-            require(ok, "CredentialStatus: fee transfer failed");
+        if (amount > 0) {
+            PaymentLib.pull(token, msg.sender, amount);
+            PaymentLib.push(token, treasury, amount);
+        } else if (PaymentLib.isNative(token)) {
+            require(msg.value == 0, "CredentialStatus: unexpected ETH");
         }
 
         records[credHash] = Record({
@@ -98,10 +160,10 @@ contract CredentialStatusRegistry {
             schemaId: schemaId,
             subject: subject,
             anchoredAt: uint64(block.timestamp),
+            validUntil: validUntil,
+            claimsCommitment: claimsCommitment,
             revokeReason: ""
         });
-
-        emit CredentialAnchored(credHash, schemaId, msg.sender, subject);
     }
 
     function revoke(bytes32 credHash, string calldata reason) external {
@@ -114,6 +176,14 @@ contract CredentialStatusRegistry {
         r.status = Status.Revoked;
         r.revokeReason = reason;
         emit CredentialRevoked(credHash, msg.sender, reason);
+    }
+
+    /// @notice Active and not past validUntil (0 = no TTL).
+    function isValid(bytes32 credHash) external view returns (bool) {
+        Record storage r = records[credHash];
+        if (r.status != Status.Active) return false;
+        if (r.validUntil != 0 && block.timestamp > r.validUntil) return false;
+        return true;
     }
 
     function status(bytes32 credHash)
@@ -130,5 +200,32 @@ contract CredentialStatusRegistry {
     {
         Record storage r = records[credHash];
         return (r.status, r.attester, r.schemaId, r.subject, r.anchoredAt, r.revokeReason);
+    }
+
+    function statusV2(bytes32 credHash)
+        external
+        view
+        returns (
+            Status st,
+            address attester,
+            bytes32 schemaId,
+            address subject,
+            uint64 anchoredAt,
+            uint64 validUntil,
+            bytes32 claimsCommitment,
+            string memory revokeReason
+        )
+    {
+        Record storage r = records[credHash];
+        return (
+            r.status,
+            r.attester,
+            r.schemaId,
+            r.subject,
+            r.anchoredAt,
+            r.validUntil,
+            r.claimsCommitment,
+            r.revokeReason
+        );
     }
 }

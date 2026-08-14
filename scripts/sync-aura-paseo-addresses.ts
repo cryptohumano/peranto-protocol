@@ -36,7 +36,11 @@ const block = `export const DEFAULT_PASEO_ADDRESSES: ContractAddresses = {
   SchemaRegistry: "${c.SchemaRegistry}",
   AttesterRegistry: "${c.AttesterRegistry}",
   CredentialStatusRegistry: "${c.CredentialStatusRegistry}",
-  NameRegistry: "${c.NameRegistry}",
+  NameRegistry: "${c.NameRegistry}",${
+    c.ComplianceZkVerifier
+      ? `\n  ComplianceZkVerifier: "${c.ComplianceZkVerifier}",`
+      : ""
+  }
 };`;
 
 let src = fs.readFileSync(typesFile, "utf8");

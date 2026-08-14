@@ -1,6 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
+import {PaymentLib} from "./libs/PaymentLib.sol";
+
+interface ITokenAllowlist {
+    function isTokenAllowed(address token) external view returns (bool);
+}
+
 /// @title NameRegistry — human-readable aliases for did:peranto addresses
 /// @notice Maps normalized labels (e.g. "ecolab") to an owner address.
 ///         The DID remains `did:peranto:<network>:<address>`; names are optional aliases.
@@ -10,14 +16,15 @@ contract NameRegistry {
 
     address public governance;
     address public treasury;
-    uint256 public registrationFee;
+    /// @dev Per-token registration fee (native = address(0))
+    mapping(address => uint256) public registrationFee;
 
     mapping(bytes32 => address) public ownerOf; // labelHash => owner
     mapping(address => bytes32) public primaryLabelOf; // reverse pointer (optional primary)
 
     event GovernanceUpdated(address indexed previous, address indexed next);
     event TreasuryUpdated(address indexed previous, address indexed next);
-    event RegistrationFeeUpdated(uint256 previous, uint256 next);
+    event RegistrationFeeUpdated(address indexed token, uint256 previous, uint256 next);
     event NameRegistered(bytes32 indexed labelHash, string label, address indexed owner);
     event NameTransferred(bytes32 indexed labelHash, address indexed from, address indexed to);
     event NameReleased(bytes32 indexed labelHash, address indexed previousOwner);
@@ -33,7 +40,7 @@ contract NameRegistry {
         require(treasury_ != address(0), "NameRegistry: zero treasury");
         governance = governance_;
         treasury = treasury_;
-        registrationFee = registrationFee_;
+        registrationFee[PaymentLib.NATIVE] = registrationFee_;
     }
 
     function setGovernance(address next) external onlyGovernance {
@@ -48,20 +55,30 @@ contract NameRegistry {
         treasury = next;
     }
 
-    function setRegistrationFee(uint256 next) external onlyGovernance {
-        emit RegistrationFeeUpdated(registrationFee, next);
-        registrationFee = next;
+    function setRegistrationFee(address token, uint256 next) external onlyGovernance {
+        emit RegistrationFeeUpdated(token, registrationFee[token], next);
+        registrationFee[token] = next;
     }
 
-    /// @notice Register a label for msg.sender. Label must be lowercase [a-z0-9-] length 3..32.
-    function register(string calldata label) external payable {
-        require(msg.value >= registrationFee, "NameRegistry: fee");
+    /// @dev Back-compat: set native fee.
+    function setRegistrationFee(uint256 next) external onlyGovernance {
+        emit RegistrationFeeUpdated(PaymentLib.NATIVE, registrationFee[PaymentLib.NATIVE], next);
+        registrationFee[PaymentLib.NATIVE] = next;
+    }
+
+    /// @notice Register a label for msg.sender. Pay with native (`token=0`) or allowlisted ERC-20.
+    function register(string calldata label, address token, uint256 amount) external payable {
+        require(ITokenAllowlist(treasury).isTokenAllowed(token), "NameRegistry: token");
+        uint256 fee = registrationFee[token];
+        require(amount >= fee, "NameRegistry: fee");
         bytes32 labelHash = _validateAndHash(label);
         require(ownerOf[labelHash] == address(0), "NameRegistry: taken");
 
-        if (msg.value > 0) {
-            (bool ok,) = treasury.call{value: msg.value}("");
-            require(ok, "NameRegistry: fee transfer failed");
+        if (amount > 0) {
+            PaymentLib.pull(token, msg.sender, amount);
+            PaymentLib.push(token, treasury, amount);
+        } else if (PaymentLib.isNative(token)) {
+            require(msg.value == 0, "NameRegistry: unexpected ETH");
         }
 
         ownerOf[labelHash] = msg.sender;

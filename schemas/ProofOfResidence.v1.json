@@ -1,0 +1,42 @@
+{
+  "$id": "peranto:ProofOfResidence:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ProofOfResidence",
+  "type": "object",
+  "required": [
+    "country",
+    "docType",
+    "issuedWithinDays",
+    "checkedAt",
+    "expiresAt",
+    "provider"
+  ],
+  "properties": {
+    "country": {
+      "type": "string",
+      "description": "ISO 3166-1 alpha-2 of residence (not citizenship)",
+      "minLength": 2,
+      "maxLength": 2
+    },
+    "region": {
+      "type": "string",
+      "description": "Optional administrative subdivision of residence"
+    },
+    "docType": {
+      "type": "string",
+      "enum": ["utility", "lease", "tax_notice", "bank_statement", "other"]
+    },
+    "issuedWithinDays": {
+      "type": ["integer", "string"],
+      "description": "Age in days of the PoA document at attestation time (policy often ≤ 90)"
+    },
+    "checkedAt": { "type": "string", "format": "date-time" },
+    "expiresAt": { "type": "string", "format": "date-time" },
+    "provider": {
+      "type": "string",
+      "description": "Who validated the PoA document / API"
+    },
+    "subjectDid": { "type": "string" }
+  },
+  "additionalProperties": true
+}

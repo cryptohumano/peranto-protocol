@@ -2,10 +2,12 @@
 pragma solidity ^0.8.24;
 
 import {DisCONode} from "./DisCONode.sol";
+import {PaymentLib} from "./libs/PaymentLib.sol";
 
 interface IProtocolTreasuryRegister {
     function registerNode(address node) external;
     function setFactory(address next) external;
+    function isTokenAllowed(address token) external view returns (bool);
 }
 
 /// @title DisCOFactory — deploys DisCONode instances into ProtocolTreasury registry
@@ -21,7 +23,9 @@ contract DisCOFactory {
     event GovernanceUpdated(address indexed previous, address indexed next);
     event ParamsUpdated(uint256 periodBlocks, uint256 reserveFloor);
     event NodeCreated(address indexed node, address indexed creator, string name);
-    event NodeSeeded(address indexed node, address indexed creator, uint256 amount, uint256 reserveFloor);
+    event NodeSeeded(
+        address indexed node, address indexed creator, address indexed token, uint256 amount, uint256 reserveFloor
+    );
 
     modifier onlyGovernance() {
         require(msg.sender == governance, "DisCOFactory: not governance");
@@ -51,21 +55,43 @@ contract DisCOFactory {
         emit ParamsUpdated(periodBlocks_, reserveFloor_);
     }
 
-    /// @notice Create a DisCO node. Optional msg.value seeds the node treasury (100% to the node).
+    /// @notice Create a DisCO node. Optional msg.value seeds native treasury (100% to the node).
     function createNode(string calldata name_) external payable returns (address node) {
-        return _create(name_, defaultReserveFloor);
+        return _create(name_, defaultReserveFloor, PaymentLib.NATIVE, msg.value);
     }
 
-    /// @notice Create with custom reserveFloor + optional seed treasury.
+    /// @notice Create with custom native reserveFloor + optional native seed.
     function createNodeWithConfig(string calldata name_, uint256 reserveFloor_)
         external
         payable
         returns (address node)
     {
-        return _create(name_, reserveFloor_);
+        return _create(name_, reserveFloor_, PaymentLib.NATIVE, msg.value);
     }
 
-    function _create(string memory name_, uint256 reserveFloor_) internal returns (address node) {
+    /// @notice Create and seed with an allowlisted ERC-20 (approve factory first).
+    function createNodeWithTokenSeed(
+        string calldata name_,
+        uint256 reserveFloor_,
+        address token,
+        uint256 amount
+    ) external returns (address node) {
+        require(!PaymentLib.isNative(token), "DisCOFactory: use payable create");
+        require(protocolTreasury.isTokenAllowed(token), "DisCOFactory: token");
+        require(amount > 0, "DisCOFactory: zero seed");
+        node = _create(name_, reserveFloor_, token, amount);
+    }
+
+    function _create(string memory name_, uint256 reserveFloor_, address seedToken, uint256 seedAmount)
+        internal
+        returns (address node)
+    {
+        if (PaymentLib.isNative(seedToken)) {
+            require(msg.value == seedAmount, "DisCOFactory: bad value");
+        } else {
+            require(msg.value == 0, "DisCOFactory: unexpected ETH");
+        }
+
         DisCONode deployed = new DisCONode(
             address(protocolTreasury),
             address(this),
@@ -80,10 +106,15 @@ contract DisCOFactory {
         protocolTreasury.registerNode(node);
         emit NodeCreated(node, msg.sender, name_);
 
-        if (msg.value > 0) {
-            (bool ok,) = node.call{value: msg.value}("");
-            require(ok, "DisCOFactory: seed failed");
-            emit NodeSeeded(node, msg.sender, msg.value, reserveFloor_);
+        if (seedAmount > 0) {
+            if (PaymentLib.isNative(seedToken)) {
+                (bool ok,) = node.call{value: seedAmount}("");
+                require(ok, "DisCOFactory: seed failed");
+            } else {
+                PaymentLib.pull(seedToken, msg.sender, seedAmount);
+                PaymentLib.push(seedToken, node, seedAmount);
+            }
+            emit NodeSeeded(node, msg.sender, seedToken, seedAmount, reserveFloor_);
         }
     }
 

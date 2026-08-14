@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
+import {PaymentLib} from "./libs/PaymentLib.sol";
+
 interface IDisCONodeView {
     function periodStats(uint256 periodId)
         external
@@ -13,7 +15,10 @@ interface IDisCONodeView {
 }
 
 /// @title ProtocolTreasury — temporary commons: activity split + canon in, hybrid redistribute out
+/// @dev Multi-token: native = address(0); ERC-20 via allowlist. Distribute is per-token.
 contract ProtocolTreasury {
+    using PaymentLib for address;
+
     address public governance;
     address public factory;
 
@@ -25,15 +30,24 @@ contract ProtocolTreasury {
 
     mapping(address => bool) public isNode;
     address[] public nodes;
-    mapping(uint256 => bool) public distributed;
+
+    /// @dev periodId => token => already distributed
+    mapping(uint256 => mapping(address => bool)) public distributed;
+
+    mapping(address => bool) public allowedToken;
+    address[] private _allowedTokens;
+    /// @dev native (address(0)) is always allowed
+    bool public nativeAllowed = true;
 
     event GovernanceUpdated(address indexed previous, address indexed next);
     event FactoryUpdated(address indexed previous, address indexed next);
     event NodeRegistered(address indexed node);
     event NodeRemoved(address indexed node);
-    event Deposited(address indexed from, uint256 amount);
-    event Distributed(uint256 indexed periodId, uint256 total, uint256 nodeCount);
+    event Deposited(address indexed from, address indexed token, uint256 amount);
+    event Distributed(uint256 indexed periodId, address indexed token, uint256 total, uint256 nodeCount);
     event ParamsUpdated();
+    event TokenAllowed(address indexed token, bool allowed);
+    event NativeAllowed(bool allowed);
 
     modifier onlyGovernance() {
         require(msg.sender == governance, "ProtocolTreasury: not governance");
@@ -51,7 +65,7 @@ contract ProtocolTreasury {
     }
 
     receive() external payable {
-        emit Deposited(msg.sender, msg.value);
+        emit Deposited(msg.sender, PaymentLib.NATIVE, msg.value);
     }
 
     function setGovernance(address next) external onlyGovernance {
@@ -77,6 +91,52 @@ contract ProtocolTreasury {
         cLove = cL;
         cAnchors = cA;
         emit ParamsUpdated();
+    }
+
+    function setNativeAllowed(bool allowed) external onlyGovernance {
+        nativeAllowed = allowed;
+        emit NativeAllowed(allowed);
+    }
+
+    /// @notice Allow or disallow an ERC-20 payment token. Native is controlled via setNativeAllowed.
+    function setTokenAllowed(address token, bool allowed) external onlyGovernance {
+        require(token != PaymentLib.NATIVE, "ProtocolTreasury: use setNativeAllowed");
+        if (allowed && !allowedToken[token]) {
+            allowedToken[token] = true;
+            _allowedTokens.push(token);
+        } else if (!allowed && allowedToken[token]) {
+            allowedToken[token] = false;
+            for (uint256 i = 0; i < _allowedTokens.length; i++) {
+                if (_allowedTokens[i] == token) {
+                    _allowedTokens[i] = _allowedTokens[_allowedTokens.length - 1];
+                    _allowedTokens.pop();
+                    break;
+                }
+            }
+        }
+        emit TokenAllowed(token, allowed);
+    }
+
+    function isTokenAllowed(address token) public view returns (bool) {
+        if (token == PaymentLib.NATIVE) return nativeAllowed;
+        return allowedToken[token];
+    }
+
+    /// @notice Native + currently allowlisted ERC-20s (for dissolve / UI).
+    function getAllowedTokens() external view returns (address[] memory out) {
+        uint256 n = _allowedTokens.length + (nativeAllowed ? 1 : 0);
+        out = new address[](n);
+        uint256 j;
+        if (nativeAllowed) {
+            out[j++] = PaymentLib.NATIVE;
+        }
+        for (uint256 i = 0; i < _allowedTokens.length; i++) {
+            out[j++] = _allowedTokens[i];
+        }
+    }
+
+    function allowedTokenCount() external view returns (uint256) {
+        return _allowedTokens.length + (nativeAllowed ? 1 : 0);
     }
 
     function registerNode(address node) external onlyFactory {
@@ -108,10 +168,20 @@ contract ProtocolTreasury {
         return nodes;
     }
 
-    /// @notice Hybrid 50/50 redistribute balance to eligible nodes for a closed period.
-    function distribute(uint256 periodId) external {
-        require(!distributed[periodId], "ProtocolTreasury: done");
-        uint256 total = address(this).balance;
+    /// @notice Accept ERC-20 deposit (e.g. from DisCONode contribute/harvest). Native via receive().
+    function depositToken(address token, uint256 amount) external {
+        require(isTokenAllowed(token), "ProtocolTreasury: token");
+        require(!PaymentLib.isNative(token), "ProtocolTreasury: use receive");
+        require(amount > 0, "ProtocolTreasury: zero");
+        PaymentLib.pull(token, msg.sender, amount);
+        emit Deposited(msg.sender, token, amount);
+    }
+
+    /// @notice Hybrid redistribute balance of `token` to eligible nodes for a closed period.
+    function distribute(uint256 periodId, address token) external {
+        require(isTokenAllowed(token), "ProtocolTreasury: token");
+        require(!distributed[periodId][token], "ProtocolTreasury: done");
+        uint256 total = PaymentLib.balanceOf(token, address(this));
         require(total > 0, "ProtocolTreasury: empty");
 
         address[] memory eligible = new address[](nodes.length);
@@ -140,7 +210,7 @@ contract ProtocolTreasury {
 
         require(nEligible > 0, "ProtocolTreasury: no eligible");
 
-        distributed[periodId] = true;
+        distributed[periodId][token] = true;
 
         uint256 equalPool = (total * equalBps) / 10000;
         uint256 weightPool = total - equalPool;
@@ -155,12 +225,10 @@ contract ProtocolTreasury {
                 share += (weightPool * weights[j]) / sumW;
             }
             if (share == 0) continue;
-            (bool ok,) = eligible[j].call{value: share}("");
-            require(ok, "ProtocolTreasury: send failed");
+            PaymentLib.push(token, eligible[j], share);
             paid += share;
         }
 
-        // Dust stays for next period
-        emit Distributed(periodId, paid, nEligible);
+        emit Distributed(periodId, token, paid, nEligible);
     }
 }

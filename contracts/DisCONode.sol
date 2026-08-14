@@ -1,12 +1,17 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
+import {PaymentLib} from "./libs/PaymentLib.sol";
+
 interface IProtocolTreasuryDeposit {
     function isNode(address node) external view returns (bool);
     function selfUnregister() external;
+    function isTokenAllowed(address token) external view returns (bool);
+    function getAllowedTokens() external view returns (address[] memory);
 }
 
 /// @title DisCONode — cooperative node: members, tips, activity fees, harvest canon
+/// @dev Multi-token: native = address(0); ERC-20 must be allowlisted on ProtocolTreasury.
 contract DisCONode {
     address public governance;
     address public immutable factory;
@@ -14,7 +19,8 @@ contract DisCONode {
 
     string public name;
     uint256 public immutable periodBlocks;
-    uint256 public reserveFloor;
+    /// @dev Per-token reserve floor (native = address(0))
+    mapping(address => uint256) public reserveFloor;
     uint256 public immutable createdAtBlock;
     uint256 public createdPeriod;
 
@@ -43,19 +49,27 @@ contract DisCONode {
     }
 
     mapping(uint256 => PeriodStats) public periodStats;
+    /// @dev periodId => token => canon already harvested for that token
+    mapping(uint256 => mapping(address => bool)) public tokenHarvested;
     mapping(uint256 => mapping(address => bool)) private _fedLinkSeen;
 
     bool public dissolved;
 
     event MemberUpdated(address indexed account, bool joined);
-    event Tipped(address indexed from, address indexed to, uint256 amount);
-    event ActivityFee(address indexed from, uint256 toNode, uint256 toProtocol);
+    event Tipped(address indexed from, address indexed to, address indexed token, uint256 amount);
+    event ActivityFee(
+        address indexed from, address indexed token, uint256 toNode, uint256 toProtocol
+    );
     event AnchorRecorded(address indexed actor, bytes32 indexed credHash);
     event FederationLinked(address indexed otherNode, uint256 indexed periodId);
-    event Harvested(uint256 indexed periodId, uint256 amount, uint256 sustainBps);
+    event Harvested(
+        uint256 indexed periodId, address indexed token, uint256 amount, uint256 sustainBps
+    );
     event GovernanceUpdated(address indexed previous, address indexed next);
-    event ReserveFloorUpdated(uint256 previous, uint256 next);
-    event Dissolved(address indexed residualTo, uint256 amount);
+    event ReserveFloorUpdated(address indexed token, uint256 previous, uint256 next);
+    event Dissolved(address indexed residualTo, uint256 nativeAmount);
+    event TokenResidual(address indexed residualTo, address indexed token, uint256 amount);
+    event Seeded(address indexed from, address indexed token, uint256 amount);
 
     modifier onlyGovernance() {
         require(msg.sender == governance, "DisCONode: not governance");
@@ -84,7 +98,7 @@ contract DisCONode {
         governance = governance_;
         name = name_;
         periodBlocks = periodBlocks_;
-        reserveFloor = reserveFloor_;
+        reserveFloor[PaymentLib.NATIVE] = reserveFloor_;
         createdAtBlock = block.number;
         createdPeriod = block.number / periodBlocks_;
         _addMember(governance_);
@@ -110,9 +124,16 @@ contract DisCONode {
         governance = next;
     }
 
+    function setReserveFloor(address token, uint256 next) external onlyGovernance whenActive {
+        require(protocolTreasury.isTokenAllowed(token), "DisCONode: token");
+        emit ReserveFloorUpdated(token, reserveFloor[token], next);
+        reserveFloor[token] = next;
+    }
+
+    /// @dev Back-compat: set native reserve floor.
     function setReserveFloor(uint256 next) external onlyGovernance whenActive {
-        emit ReserveFloorUpdated(reserveFloor, next);
-        reserveFloor = next;
+        emit ReserveFloorUpdated(PaymentLib.NATIVE, reserveFloor[PaymentLib.NATIVE], next);
+        reserveFloor[PaymentLib.NATIVE] = next;
     }
 
     function addMember(address account) external onlyGovernance whenActive {
@@ -133,11 +154,20 @@ contract DisCONode {
         emit MemberUpdated(account, false);
     }
 
+    /// @notice Seed node treasury with an allowlisted ERC-20 (native via receive / factory msg.value).
+    function seedToken(address token, uint256 amount) external whenActive {
+        require(protocolTreasury.isTokenAllowed(token), "DisCONode: token");
+        require(!PaymentLib.isNative(token), "DisCONode: use native send");
+        require(amount > 0, "DisCONode: zero");
+        PaymentLib.pull(token, msg.sender, amount);
+        emit Seeded(msg.sender, token, amount);
+    }
+
     /// @notice Peer tip: full value to recipient; Care↑ sender, Love↑ recipient (+ period aggregates).
-    /// @dev Self-tips forbidden: would mint Care+Love with zero PAS transfer and inflate period weight / sustainBps.
-    ///      Tipping the node (`to == this`) remains allowed (Care↑ sender, period Love↑, PAS stays in treasury).
-    function tip(address to) external payable whenActive {
-        require(msg.value > 0, "DisCONode: zero tip");
+    /// @dev Self-tips forbidden. Tipping the node (`to == this`) keeps funds in the node treasury.
+    function tip(address to, address token, uint256 amount) external payable whenActive {
+        require(amount > 0, "DisCONode: zero tip");
+        require(protocolTreasury.isTokenAllowed(token), "DisCONode: token");
         require(to != address(0), "DisCONode: zero to");
         require(to != msg.sender, "DisCONode: self tip");
         require(isMember[to] || to == address(this), "DisCONode: to not member");
@@ -145,6 +175,8 @@ contract DisCONode {
         uint256 pid = currentPeriod();
         PeriodStats storage s = periodStats[pid];
         require(!s.harvested, "DisCONode: period closed");
+
+        PaymentLib.pull(token, msg.sender, amount);
 
         carePoints[msg.sender] += 1;
         s.care += 1;
@@ -154,27 +186,28 @@ contract DisCONode {
         } else {
             lovePoints[to] += 1;
             s.love += 1;
-            (bool ok,) = to.call{value: msg.value}("");
-            require(ok, "DisCONode: tip transfer");
+            PaymentLib.push(token, to, amount);
         }
 
-        emit Tipped(msg.sender, to, msg.value);
+        emit Tipped(msg.sender, to, token, amount);
     }
 
-    /// @notice Route livelihood/activity fee: 80% node treasury, 20% protocol.
-    function contribute() external payable whenActive {
-        require(msg.value > 0, "DisCONode: zero");
+    /// @notice Route livelihood/activity fee: 80% node treasury, 20% protocol (same token).
+    function contribute(address token, uint256 amount) external payable whenActive {
+        require(amount > 0, "DisCONode: zero");
+        require(protocolTreasury.isTokenAllowed(token), "DisCONode: token");
         uint256 pid = currentPeriod();
         require(!periodStats[pid].harvested, "DisCONode: period closed");
 
-        uint256 toProtocol = (msg.value * PROTOCOL_SHARE_BPS) / 10000;
-        uint256 toNode = msg.value - toProtocol;
+        PaymentLib.pull(token, msg.sender, amount);
+
+        uint256 toProtocol = (amount * PROTOCOL_SHARE_BPS) / 10000;
+        uint256 toNode = amount - toProtocol;
         if (toProtocol > 0) {
-            (bool ok,) = address(protocolTreasury).call{value: toProtocol}("");
-            require(ok, "DisCONode: protocol fee");
+            _sendToTreasury(token, toProtocol);
         }
         livelihoodPoints[msg.sender] += 1;
-        emit ActivityFee(msg.sender, toNode, toProtocol);
+        emit ActivityFee(msg.sender, token, toNode, toProtocol);
     }
 
     function recordAnchor(bytes32 credHash) external whenActive {
@@ -213,36 +246,40 @@ contract DisCONode {
         return BPS_INTEGRATED;
     }
 
-    /// @notice Permissionless harvest of canon for a past or current-closed intent period.
-    function harvest(uint256 periodId) external whenActive {
+    /// @notice Permissionless harvest of canon for one token in a closed period.
+    function harvest(uint256 periodId, address token) external whenActive {
+        require(protocolTreasury.isTokenAllowed(token), "DisCONode: token");
         require(periodId < currentPeriod(), "DisCONode: period open");
         PeriodStats storage s = periodStats[periodId];
-        require(!s.harvested, "DisCONode: harvested");
+        require(!tokenHarvested[periodId][token], "DisCONode: harvested");
 
-        s.harvested = true;
-        uint256 bal = address(this).balance;
+        if (!s.harvested) {
+            s.harvested = true;
+        }
+        tokenHarvested[periodId][token] = true;
+
+        uint256 bal = PaymentLib.balanceOf(token, address(this));
+        uint256 floor = reserveFloor[token];
         uint256 bps = sustainBpsFor(periodId);
         uint256 amount;
-        if (bal > reserveFloor) {
-            uint256 base = bal - reserveFloor;
+        if (bal > floor) {
+            uint256 base = bal - floor;
             amount = (base * bps) / 10000;
         }
         if (amount > 0) {
-            (bool ok,) = address(protocolTreasury).call{value: amount}("");
-            require(ok, "DisCONode: harvest send");
+            _sendToTreasury(token, amount);
         }
-        emit Harvested(periodId, amount, bps);
+        emit Harvested(periodId, token, amount, bps);
     }
 
-    function withdraw(address to, uint256 amount) external onlyGovernance whenActive {
+    function withdraw(address to, address token, uint256 amount) external onlyGovernance whenActive {
         require(to != address(0), "DisCONode: zero to");
-        require(amount <= address(this).balance, "DisCONode: bal");
-        (bool ok,) = to.call{value: amount}("");
-        require(ok, "DisCONode: withdraw");
+        require(protocolTreasury.isTokenAllowed(token), "DisCONode: token");
+        require(amount <= PaymentLib.balanceOf(token, address(this)), "DisCONode: bal");
+        PaymentLib.push(token, to, amount);
     }
 
-    /// @notice Liquidate node: empty members, send residual balance, unregister from ProtocolTreasury.
-    /// @dev Does NOT revoke JWT credential anchors — callers should revoke Member VCs separately.
+    /// @notice Liquidate node: empty members, send residual of all allowlisted tokens, unregister.
     function dissolve(address payable residualTo) external onlyGovernance whenActive {
         require(residualTo != address(0), "DisCONode: zero to");
         dissolved = true;
@@ -254,14 +291,25 @@ contract DisCONode {
         }
         delete _members;
 
-        uint256 bal = address(this).balance;
-        if (bal > 0) {
-            (bool ok,) = residualTo.call{value: bal}("");
-            require(ok, "DisCONode: dissolve send");
+        address[] memory tokens = protocolTreasury.getAllowedTokens();
+        uint256 nativeBal;
+        for (uint256 t = 0; t < tokens.length; t++) {
+            address token = tokens[t];
+            uint256 bal = PaymentLib.balanceOf(token, address(this));
+            if (bal == 0) continue;
+            if (PaymentLib.isNative(token)) {
+                nativeBal = bal;
+            }
+            PaymentLib.push(token, residualTo, bal);
+            emit TokenResidual(residualTo, token, bal);
         }
 
         protocolTreasury.selfUnregister();
-        emit Dissolved(residualTo, bal);
+        emit Dissolved(residualTo, nativeBal);
+    }
+
+    function _sendToTreasury(address token, uint256 amount) internal {
+        PaymentLib.push(token, address(protocolTreasury), amount);
     }
 
     function _addMember(address account) internal {

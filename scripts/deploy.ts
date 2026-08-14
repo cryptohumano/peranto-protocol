@@ -116,6 +116,63 @@ async function main() {
   const names = await Names.deploy(deployer.address, treasuryAddr, nameFee);
   await names.waitForDeployment();
 
+  // Compliance ZK gate (policy defaults — governance can update)
+  const allowlistRoot = ethers.id("peranto:allowlist:demo");
+  const Gate = await ethers.getContractFactory("ComplianceZkVerifier");
+  const complianceGate = await Gate.deploy(
+    await cred.getAddress(),
+    deployer.address,
+    9000n,
+    allowlistRoot
+  );
+  await complianceGate.waitForDeployment();
+
+  // Wire attester → treasury allowlist (native always allowed by default).
+  await (await attester.setTokenRegistry(treasuryAddr, overrides)).wait();
+
+  /** Comma-separated ERC-20 addresses to allow as payment tokens on this chain. */
+  const paymentTokenAddrs = (process.env.PAYMENT_TOKENS ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => /^0x[a-fA-F0-9]{40}$/.test(s));
+
+  type PaymentTokenMeta = {
+    address: string;
+    symbol: string;
+    decimals: number;
+    native: boolean;
+  };
+
+  const paymentTokens: PaymentTokenMeta[] = [
+    {
+      address: ethers.ZeroAddress,
+      symbol: network.chainId === 420420417n ? "PAS" : "ETH",
+      decimals: 18,
+      native: true,
+    },
+  ];
+
+  for (const addr of paymentTokenAddrs) {
+    await (await protocolTreasury.setTokenAllowed(addr, true, overrides)).wait();
+    let symbol = "ERC20";
+    let decimals = 18;
+    try {
+      const erc20 = await ethers.getContractAt(
+        [
+          "function symbol() view returns (string)",
+          "function decimals() view returns (uint8)",
+        ],
+        addr
+      );
+      symbol = await erc20.symbol();
+      decimals = Number(await erc20.decimals());
+    } catch {
+      /* keep defaults */
+    }
+    paymentTokens.push({ address: addr, symbol, decimals, native: false });
+    console.log(`Allowed payment token → ${symbol} (${addr})`);
+  }
+
   const ecoSchemaId = ethers.id("peranto:EcoTestResult:v1");
   const ecoSchemaHash = ethers.id(
     JSON.stringify({
@@ -196,6 +253,45 @@ async function main() {
     )
   ).wait();
 
+  const livenessSchemaId = ethers.id("peranto:LivenessCheck:v1");
+  const livenessSchemaHash = ethers.id(
+    JSON.stringify({
+      $id: "peranto:LivenessCheck:v1",
+      type: "object",
+      required: ["provider", "score", "checkedAt", "expiresAt"],
+    })
+  );
+  await (
+    await schema.registerSchema(
+      livenessSchemaId,
+      livenessSchemaHash,
+      "https://peranto.app/schemas/LivenessCheck/v1.json"
+    )
+  ).wait();
+
+  const residenceSchemaId = ethers.id("peranto:ProofOfResidence:v1");
+  const residenceSchemaHash = ethers.id(
+    JSON.stringify({
+      $id: "peranto:ProofOfResidence:v1",
+      type: "object",
+      required: [
+        "country",
+        "docType",
+        "issuedWithinDays",
+        "checkedAt",
+        "expiresAt",
+        "provider",
+      ],
+    })
+  );
+  await (
+    await schema.registerSchema(
+      residenceSchemaId,
+      residenceSchemaHash,
+      "https://peranto.app/schemas/ProofOfResidence/v1.json"
+    )
+  ).wait();
+
   const deployment = {
     network: network.name,
     chainId: Number(network.chainId),
@@ -208,6 +304,7 @@ async function main() {
     nameFee: nameFee.toString(),
     periodBlocks: periodBlocks.toString(),
     reserveFloor: reserveFloor.toString(),
+    paymentTokens,
     contracts: {
       ProtocolTreasury: treasuryAddr,
       DisCOFactory: await factory.getAddress(),
@@ -218,6 +315,7 @@ async function main() {
       AttesterRegistry: await attester.getAddress(),
       CredentialStatusRegistry: await cred.getAddress(),
       NameRegistry: await names.getAddress(),
+      ComplianceZkVerifier: await complianceGate.getAddress(),
     },
     schemas: {
       "peranto:EcoTestResult:v1": ecoSchemaId,
@@ -225,6 +323,8 @@ async function main() {
       "peranto:Member:v1": memberSchemaId,
       "peranto:CommonsWork:v1": commonsSchemaId,
       "peranto:CareContribution:v1": careSchemaId,
+      "peranto:LivenessCheck:v1": livenessSchemaId,
+      "peranto:ProofOfResidence:v1": residenceSchemaId,
     },
   };
 

@@ -1,6 +1,6 @@
 /**
- * One-shot: register Member/CommonsWork/Care schemas on an existing deployment
- * without redeploying registries.
+ * One-shot: register Member/CommonsWork/Care + compliance schemas on an
+ * existing deployment without redeploying registries.
  *
  * Usage: npx hardhat run scripts/register-schemas.ts --network paseo
  */
@@ -23,6 +23,23 @@ const SCHEMAS = [
     key: "peranto:CareContribution:v1",
     required: ["kind", "contributedAt"],
     uri: "https://peranto.app/schemas/CareContribution/v1.json",
+  },
+  {
+    key: "peranto:LivenessCheck:v1",
+    required: ["provider", "score", "checkedAt", "expiresAt"],
+    uri: "https://peranto.app/schemas/LivenessCheck/v1.json",
+  },
+  {
+    key: "peranto:ProofOfResidence:v1",
+    required: [
+      "country",
+      "docType",
+      "issuedWithinDays",
+      "checkedAt",
+      "expiresAt",
+      "provider",
+    ],
+    uri: "https://peranto.app/schemas/ProofOfResidence/v1.json",
   },
 ] as const;
 
