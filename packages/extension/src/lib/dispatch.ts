@@ -9,6 +9,21 @@ import {
   runAction,
 } from "./actions";
 import { handleProviderRequest } from "./provider";
+import {
+  forgetAllTrustedSites,
+  forgetTrustedSite,
+  getTrustedSites,
+  getPendingAuthorization,
+  approvePendingSite,
+  rejectPendingSite,
+} from "./domain-gate";
+import {
+  getPendingHolder,
+  approvePendingSave,
+  approvePendingShare,
+  approvePendingProve,
+  rejectPendingHolder,
+} from "./holder-flow";
 
 function jsonSafe(value: unknown): unknown {
   return JSON.parse(
@@ -57,9 +72,72 @@ export async function dispatch(
     case "PROVIDER_REQUEST": {
       const data = await handleProviderRequest(
         message.method,
-        message.params ?? []
+        message.params ?? [],
+        {
+          origin: message.origin,
+          didConfiguration: message.didConfiguration,
+        }
       );
       return { ok: true, data: jsonSafe(data) };
+    }
+
+    case "FORGET_TRUSTED_SITE": {
+      await forgetTrustedSite(message.origin);
+      const sites = await getTrustedSites();
+      await storage.setTrustedSites(sites);
+      return { ok: true, state: await storage.getState() };
+    }
+
+    case "FORGET_ALL_TRUSTED_SITES": {
+      await forgetAllTrustedSites();
+      await storage.setTrustedSites([]);
+      return { ok: true, state: await storage.getState() };
+    }
+
+    case "GET_PENDING_AUTH": {
+      const pending = await getPendingAuthorization();
+      return { ok: true, data: pending, state: await storage.getState() };
+    }
+
+    case "APPROVE_PENDING_SITE": {
+      const approved = await approvePendingSite();
+      return {
+        ok: true,
+        data: approved,
+        state: await storage.getState(),
+      };
+    }
+
+    case "REJECT_PENDING_SITE": {
+      await rejectPendingSite();
+      const sites = await getTrustedSites();
+      await storage.setTrustedSites(sites);
+      return { ok: true, state: await storage.getState() };
+    }
+
+    case "GET_PENDING_HOLDER": {
+      const pending = await getPendingHolder();
+      return { ok: true, data: pending, state: await storage.getState() };
+    }
+
+    case "APPROVE_SAVE_CREDENTIAL": {
+      await approvePendingSave();
+      return { ok: true, state: await storage.getState() };
+    }
+
+    case "APPROVE_SHARE_CREDENTIAL": {
+      await approvePendingShare(message.credHash, message.disclose);
+      return { ok: true, state: await storage.getState() };
+    }
+
+    case "APPROVE_PROVE_COMPLIANCE": {
+      await approvePendingProve();
+      return { ok: true, state: await storage.getState() };
+    }
+
+    case "REJECT_HOLDER_REQUEST": {
+      await rejectPendingHolder(message.reason);
+      return { ok: true, state: await storage.getState() };
     }
 
     default:

@@ -9,6 +9,7 @@ type Persisted = {
   credentials: StoredCredential[];
   settings: AuraSettings;
   knownNodes: Array<{ address: Address; name: string }>;
+  trustedSites?: AuraState["trustedSites"];
 };
 
 async function read(): Promise<Persisted> {
@@ -20,6 +21,7 @@ async function read(): Promise<Persisted> {
       credentials: [],
       settings: defaultSettings("paseo"),
       knownNodes: [],
+      trustedSites: [],
     };
   }
   return {
@@ -27,6 +29,7 @@ async function read(): Promise<Persisted> {
     credentials: data.credentials ?? [],
     settings: data.settings ?? defaultSettings("paseo"),
     knownNodes: data.knownNodes ?? [],
+    trustedSites: data.trustedSites ?? [],
   };
 }
 
@@ -79,6 +82,12 @@ export async function rememberNode(address: Address, name: string) {
     ),
   ];
   return write({ knownNodes });
+}
+
+export async function setTrustedSites(
+  trustedSites: NonNullable<AuraState["trustedSites"]>
+) {
+  return write({ trustedSites });
 }
 
 export async function clearAll() {

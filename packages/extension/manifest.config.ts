@@ -47,6 +47,14 @@ export default defineManifest({
     "http://localhost:8545/*",
     "http://localhost:5173/*",
     "http://127.0.0.1:5173/*",
+    "http://localhost:5174/*",
+    "http://127.0.0.1:5174/*",
+    "http://localhost:8787/*",
+    "http://127.0.0.1:8787/*",
     "https://eth-rpc-testnet.polkadot.io/*",
   ],
+  // @polkadot/wasm-crypto needs WASM compile in popup/SW (MV3 default CSP forbids it)
+  content_security_policy: {
+    extension_pages: "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'",
+  },
 });

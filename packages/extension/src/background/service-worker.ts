@@ -12,6 +12,11 @@ chrome.runtime.onInstalled.addListener(() => {
   console.log("[Aura] installed");
 });
 
+chrome.windows?.onRemoved?.addListener((windowId) => {
+  // Allow a fresh consent window next time
+  void import("../lib/open-consent").then((m) => m.clearConsentWindowId(windowId));
+});
+
 chrome.runtime.onMessage.addListener(
   (message: ExtensionMessage, _sender, sendResponse) => {
     dispatch(message)

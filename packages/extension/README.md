@@ -4,13 +4,55 @@ Extensión Manifest V3 (Chrome / Brave / Edge) para el protocolo **did:peranto**
 
 ## Acciones
 
-| Pestaña | Acciones |
-|---------|----------|
-| **Inicio** | Crear/importar DID, resolver DID, `stakeAndJoin`, chequear autorización |
-| **VCs** | Issue + anchor EcoTest, verificar JWT, vault local, revocar |
-| **DisCO** | createNode, tip, contribute, harvest, distribute, scores, addMember |
-| **Nombres** | register / resolve |
-| **Red** | hardhat ↔ paseo, RPC, importar JSON de `deployments/` |
+| Modo | Pestañas |
+|------|----------|
+| **Holder** (default) | Inicio, Credenciales, Ajustes — vault, importar JWT, autorizar dapps |
+| **Lab** | + Firmar, Emitir, DisCO, Nombres, Attester |
+
+### Autorizar dapp (estilo Sporran)
+
+1. La dapp publica `/.well-known/did-configuration.json`.
+2. Al pedir vault / acción sensible, Aura verifica DomainLinkage.
+3. Si el crypto es OK pero aún no aprobaste el origen, aparece el panel **Autorizar dapp** (badge en el icono).
+4. Aprobar → la dapp puede reintentar. Rechazar → se olvida el origen.
+
+Generar well-known: `npm run cli -- did-config create --origin https://… --private-key 0x…`
+
+### Save + Share (holder)
+
+Tras autorizar el origen, la dapp puede:
+
+```js
+// Guardar VC
+await aura.request({
+  method: "peranto_saveCredential",
+  params: [{ jwt, label: "Liveness" }],
+});
+
+// Presentación completa (JWT + challenge)
+const full = await aura.request({
+  method: "peranto_requestCredential",
+  params: [{
+    schemaKeys: ["peranto:LivenessCheck:v1"],
+    challenge: crypto.randomUUID(),
+  }],
+});
+
+// Solo claims (sin JWT) — p.ej. país para un gate
+const claims = await aura.request({
+  method: "peranto_requestCredential",
+  params: [{
+    schemaKeys: ["peranto:ProofOfResidence:v1"],
+    mode: "claims",
+    disclose: ["country"],
+    challenge: crypto.randomUUID(),
+  }],
+});
+// claims.disclosedClaims.country + claims.proof
+```
+
+Verificar con `@peranto/sdk` → `verifyPresentation(presentation, { expectedChallenge })`.
+Aliases: `wallet_saveCredential`, `wallet_requestCredential`. Timeout ~110s.
 
 ## Firmas multi-cadena
 
@@ -77,3 +119,4 @@ npm run extension:dev
 - Las claves viven en `chrome.storage.local` (demo; no es una wallet de producción con hardware/HSM).
 - Paseo: tras `npm run deploy:paseo`, importa el JSON de deployment y selecciona red `paseo`.
 - El service worker ejecuta las txs vía `@peranto/sdk` + viem (misma superficie que el CLI).
+- **Domain linkage:** las dapps que pidan vault / acciones privilegiadas **deben** publicar `/.well-known/did-configuration.json`. Aura verifica DomainLinkageCredential (fail closed) antes de `wallet_getCredentials`, `peranto_action` sensibles y `peranto_requestSession`. Spec: [`docs/well-known-did-configuration.md`](../../docs/well-known-did-configuration.md). Generar el JSON: `npm run cli -- did-config create --origin https://tu-dapp --private-key 0x…`.

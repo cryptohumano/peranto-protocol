@@ -9,6 +9,9 @@ import {
   signSubstrateExtrinsicPayload,
   verifyPayload,
   credentialStatusAbi,
+  peekJwtClaims,
+  parseCredentialImport,
+  verifyEcoTestJwt,
   type PerantoNetwork,
   type SignatureScheme,
 } from "@peranto/sdk";
@@ -98,6 +101,7 @@ export async function updateSettings(partial: Partial<AuraSettings>) {
       ...partial,
       addresses: partial.addresses ?? defaults.addresses,
       rpcUrl: partial.rpcUrl ?? defaults.rpcUrl,
+      uiMode: partial.uiMode ?? state.settings.uiMode ?? defaults.uiMode,
     };
     if (state.identity) {
       await storage.setIdentity({
@@ -447,21 +451,28 @@ export async function runAction(
     }
 
     case "vc.import": {
-      const jwt = String(payload.jwt ?? "").trim();
-      if (!jwt) throw new Error("JWT requerido");
-      const client = await buildClient(false);
-      const verified = await client.verifyCredential(jwt);
-      if (!verified.jwtValid) {
-        throw new Error(verified.details.error ?? "JWT inválido");
+      const raw = String(payload.jwt ?? payload.raw ?? "").trim();
+      if (!raw) throw new Error("JWT o JSON Peranto requerido");
+      const parsed = parseCredentialImport(raw);
+      const jwt = parsed.jwt;
+      const soft = await verifyEcoTestJwt(jwt);
+      if (!soft.valid) {
+        throw new Error(soft.error ?? "JWT inválido");
       }
+      const peek = peekJwtClaims(jwt);
+      const schemaKey =
+        parsed.schemaKey ||
+        peek.schemaKey ||
+        peek.types?.find((t) => t.startsWith("peranto:")) ||
+        "peranto:Unknown:v1";
       const cred: StoredCredential = {
-        id: verified.details.credHash,
+        id: soft.credHash,
         jwt,
-        credHash: verified.details.credHash,
-        schemaKey: "peranto:EcoTestResult:v1",
-        issuerDid: verified.details.issuerDid,
-        subjectDid: verified.details.subjectDid,
-        label: String(payload.label ?? "Imported VC"),
+        credHash: soft.credHash,
+        schemaKey,
+        issuerDid: soft.issuerDid,
+        subjectDid: soft.subjectDid,
+        label: String(payload.label ?? parsed.label ?? schemaKey),
         savedAt: new Date().toISOString(),
       };
       await storage.addCredential(cred);
@@ -517,9 +528,12 @@ export async function runAction(
       const value = valueRaw.includes(".")
         ? parseEther(valueRaw)
         : BigInt(valueRaw);
+      const token = (payload.token
+        ? String(payload.token)
+        : "0x0000000000000000000000000000000000000000") as Address;
       const client = await buildClient(true);
-      const tx = await client.tip(node, to, value);
-      return jsonSafe({ tx, node, to, value: value.toString() });
+      const tx = await client.tip(node, to, value, token);
+      return jsonSafe({ tx, node, to, value: value.toString(), token });
     }
 
     case "disco.contribute": {
@@ -529,24 +543,33 @@ export async function runAction(
       const value = valueRaw.includes(".")
         ? parseEther(valueRaw)
         : BigInt(valueRaw);
+      const token = (payload.token
+        ? String(payload.token)
+        : "0x0000000000000000000000000000000000000000") as Address;
       const client = await buildClient(true);
-      const tx = await client.contribute(node, value);
-      return jsonSafe({ tx, node, value: value.toString() });
+      const tx = await client.contribute(node, value, token);
+      return jsonSafe({ tx, node, value: value.toString(), token });
     }
 
     case "disco.harvest": {
       const node = String(payload.node ?? "") as Address;
       const periodId = BigInt(String(payload.periodId ?? "0"));
+      const token = (payload.token
+        ? String(payload.token)
+        : "0x0000000000000000000000000000000000000000") as Address;
       const client = await buildClient(true);
-      const tx = await client.harvest(node, periodId);
-      return jsonSafe({ tx, node, periodId: periodId.toString() });
+      const tx = await client.harvest(node, periodId, token);
+      return jsonSafe({ tx, node, periodId: periodId.toString(), token });
     }
 
     case "disco.distribute": {
       const periodId = BigInt(String(payload.periodId ?? "0"));
+      const token = (payload.token
+        ? String(payload.token)
+        : "0x0000000000000000000000000000000000000000") as Address;
       const client = await buildClient(true);
-      const tx = await client.distribute(periodId);
-      return jsonSafe({ tx, periodId: periodId.toString() });
+      const tx = await client.distribute(periodId, token);
+      return jsonSafe({ tx, periodId: periodId.toString(), token });
     }
 
     case "disco.scores": {

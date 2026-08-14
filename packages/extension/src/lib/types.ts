@@ -26,6 +26,12 @@ export type StoredCredential = {
   label: string;
   savedAt: string;
   anchorTx?: Hex;
+  /** Compliance openings — never share to curator; used for local ZK prove. */
+  meta?: {
+    claimsCommitment?: Hex;
+    commitmentSalt?: Hex;
+    validUntil?: number;
+  };
 };
 
 export type AuraSettings = {
@@ -34,6 +40,8 @@ export type AuraSettings = {
   /** WS Substrate nativo (extrinsics / indexing); opcional. */
   substrateWsUrl?: string;
   addresses: ContractAddresses;
+  /** holder = UX Sporran-like; lab = attester / DisCO / firmas avanzadas */
+  uiMode?: "holder" | "lab";
 };
 
 export type AuraState = {
@@ -41,6 +49,13 @@ export type AuraState = {
   credentials: StoredCredential[];
   settings: AuraSettings;
   knownNodes: Array<{ address: Address; name: string }>;
+  /** Cached domain-linkage trusts (also mirrored in chrome.storage aura_dl_*). */
+  trustedSites?: Array<{
+    origin: string;
+    issuerDid: string;
+    verifiedAt: string;
+    expiresAt: string;
+  }>;
 };
 
 /** Default Hardhat local deploy (re-deploy may change these). */
@@ -57,15 +72,16 @@ export const DEFAULT_HARDHAT_ADDRESSES: ContractAddresses = {
 
 /** Bundled Paseo Hub TestNet deploy (keep in sync with deployments/420420417.json). */
 export const DEFAULT_PASEO_ADDRESSES: ContractAddresses = {
-  ProtocolTreasury: "0x28d5eABFd6059EEacb3403ab87b19231C98a10cd",
-  DisCOFactory: "0xf9Ce67d606cf4416e9FDFdA6EA7579888402B72C",
-  PerantoNode: "0x6DF1F4B42C033762C91FB467a5C059A940b13788",
-  EcosystemLabNode: "0x5085113140A5b99ED837eDdc4E8fdF48C131B034",
-  DIDRegistry: "0x487183414D0eF7C20c57b18c391567D5D3473124",
-  SchemaRegistry: "0xC73c1F9773291Aa03Aac89B74BD388BcCD1E682E",
-  AttesterRegistry: "0xeA4fCB68bCa0FF44c96799054bb7b551067B5D7e",
-  CredentialStatusRegistry: "0xC44ECE9509B4f7804520AF5bef4450CCd80e62EA",
-  NameRegistry: "0x42eb2Fe585c7A4cD803a2F1A3ccF3869F3bf68da",
+  ProtocolTreasury: "0x45e8ade918FB36867325E298a5A76180dd1DFF99",
+  DisCOFactory: "0x988550A4bAD29F3d11BcAf5cB7274Ae1d0282b99",
+  PerantoNode: "0xCc340938b25AA8D2C08760735611Ae57e75F8786",
+  EcosystemLabNode: "0x99125a8024220e6A757282C9B07524B411872E2E",
+  DIDRegistry: "0xe7e10dD5fd25053A3c35EDa8A771753B3E57D907",
+  SchemaRegistry: "0xe76472ff2212B5aC8E027120043D30D520BD86B1",
+  AttesterRegistry: "0x963eA758320e5273885EEF53bE99c608d5C555AB",
+  CredentialStatusRegistry: "0xb321Ae1E98476752867a6191F74AeD2353c0c534",
+  NameRegistry: "0x76b82117623Cc3793e0FA3768aE16A123Eaf9134",
+  ComplianceZkVerifier: "0x4BA2dfc1Cbb370C3712fe011d9333bfb0CE0419E",
 };
 
 export function defaultSettings(network: PerantoNetwork = "paseo"): AuraSettings {
@@ -84,6 +100,7 @@ export function defaultSettings(network: PerantoNetwork = "paseo"): AuraSettings
       rpcUrl: rpc.hardhat,
       substrateWsUrl: "",
       addresses: DEFAULT_HARDHAT_ADDRESSES,
+      uiMode: "holder",
     };
   }
   if (network === "paseo") {
@@ -92,12 +109,14 @@ export function defaultSettings(network: PerantoNetwork = "paseo"): AuraSettings
       rpcUrl: rpc.paseo,
       substrateWsUrl: "wss://rpc.paseo.dev",
       addresses: DEFAULT_PASEO_ADDRESSES,
+      uiMode: "holder",
     };
   }
   return {
     network,
     rpcUrl: rpc[network],
     substrateWsUrl: "",
+    uiMode: "holder",
     addresses: {
       DIDRegistry: "0x0000000000000000000000000000000000000000",
       SchemaRegistry: "0x0000000000000000000000000000000000000000",
@@ -127,7 +146,21 @@ export type ExtensionMessage =
       id: number;
       method: string;
       params?: unknown[];
-    };
+      /** Page origin from content script (`location.origin`). */
+      origin?: string;
+      /** Optional pre-fetched `/.well-known/did-configuration.json`. */
+      didConfiguration?: unknown;
+    }
+  | { type: "FORGET_TRUSTED_SITE"; origin: string }
+  | { type: "FORGET_ALL_TRUSTED_SITES" }
+  | { type: "GET_PENDING_AUTH" }
+  | { type: "APPROVE_PENDING_SITE" }
+  | { type: "REJECT_PENDING_SITE" }
+  | { type: "GET_PENDING_HOLDER" }
+  | { type: "APPROVE_SAVE_CREDENTIAL" }
+  | { type: "APPROVE_SHARE_CREDENTIAL"; credHash: string; disclose?: string[] }
+  | { type: "APPROVE_PROVE_COMPLIANCE" }
+  | { type: "REJECT_HOLDER_REQUEST"; reason?: string };
 
 export type ExtensionResponse =
   | { ok: true; state?: AuraState; data?: unknown }

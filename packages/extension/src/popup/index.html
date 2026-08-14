@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap"
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Newsreader:opsz,wght@6..72,500;6..72,600&family=Source+Sans+3:wght@400;500;600&display=swap"
       rel="stylesheet"
     />
     <link rel="stylesheet" href="./styles.css" />
@@ -19,11 +19,121 @@
           <span class="mark" aria-hidden="true"></span>
           <div>
             <h1>Aura</h1>
-            <p class="tag">did:peranto · EcoTest · DisCO</p>
+            <p class="tag" id="brand-tag">Identidad did:peranto</p>
           </div>
         </div>
-        <div class="network-pill" id="network-pill">paseo</div>
+        <div class="network-switch">
+          <button
+            type="button"
+            class="network-pill"
+            id="network-pill"
+            data-status="live"
+            aria-haspopup="listbox"
+            aria-expanded="false"
+            title="Cambiar red"
+          >
+            <span class="dot" aria-hidden="true"></span>
+            <span id="network-pill-label">Paseo</span>
+            <span class="chev" aria-hidden="true">▾</span>
+          </button>
+          <div
+            class="network-menu"
+            id="network-menu"
+            role="listbox"
+            aria-label="Redes"
+            hidden
+          >
+            <div class="network-menu-head">Redes Peranto</div>
+            <div id="network-menu-list"></div>
+          </div>
+        </div>
       </header>
+
+      <!-- Autorizar dapp (Sporran-style) -->
+      <aside class="authorize" id="authorize-panel" hidden>
+        <h2>Autorizar dapp</h2>
+        <p class="hint">
+          Domain linkage verificado. ¿Permitir que este origen use tu vault /
+          acciones Peranto?
+        </p>
+        <p class="mono tiny" id="authorize-origin"></p>
+        <p class="mono tiny" id="authorize-did"></p>
+        <div class="row">
+          <button type="button" class="btn primary" id="btn-approve-site">
+            Aprobar
+          </button>
+          <button type="button" class="btn danger" id="btn-reject-site">
+            Rechazar
+          </button>
+        </div>
+      </aside>
+
+      <!-- Guardar credencial desde dapp -->
+      <aside class="authorize holder-save" id="save-panel" hidden>
+        <h2>Guardar credencial</h2>
+        <p class="hint">
+          Una dapp quiere guardar una VC en tu vault. Revisa issuer y schema.
+        </p>
+        <p class="mono tiny" id="save-origin"></p>
+        <p class="hint" id="save-schema"></p>
+        <p class="mono tiny" id="save-issuer"></p>
+        <p class="mono tiny" id="save-subject"></p>
+        <div class="row">
+          <button type="button" class="btn primary" id="btn-approve-save">
+            Guardar
+          </button>
+          <button type="button" class="btn danger" id="btn-reject-save">
+            Rechazar
+          </button>
+        </div>
+      </aside>
+
+      <!-- Compartir / presentar credencial -->
+      <aside class="authorize holder-share" id="share-panel" hidden>
+        <h2>Compartir</h2>
+        <p class="hint" id="share-mode-hint">
+          Elige qué VC presentar. Aura firmará el challenge.
+        </p>
+        <p class="mono tiny" id="share-origin"></p>
+        <p class="hint" id="share-schemas"></p>
+        <p class="mono tiny" id="share-challenge"></p>
+        <div id="share-candidates" class="vault"></div>
+        <div id="share-claims-box" hidden>
+          <p class="hint">Claims a revelar (sin enviar el JWT completo):</p>
+          <div id="share-claims-list" class="claims-list"></div>
+          <button type="button" class="btn primary" id="btn-confirm-share-claims">
+            Firmar y compartir claims
+          </button>
+        </div>
+        <p class="hint" id="share-empty" hidden>
+          No tienes credenciales que coincidan.
+        </p>
+        <div class="row">
+          <button type="button" class="btn danger" id="btn-reject-share">
+            Rechazar
+          </button>
+        </div>
+      </aside>
+
+      <!-- Prueba ZK compliance (sin revelar claims) -->
+      <aside class="authorize holder-share" id="prove-panel" hidden>
+        <h2>Prueba ZK</h2>
+        <p class="hint">
+          La dapp pide una prueba de cumplimiento <strong>sin</strong> ver score
+          ni país. El salt no sale de Aura.
+        </p>
+        <p class="mono tiny" id="prove-origin"></p>
+        <p class="hint" id="prove-policy"></p>
+        <p class="mono tiny" id="prove-creds"></p>
+        <div class="row">
+          <button type="button" class="btn primary" id="btn-approve-prove">
+            Generar y enviar prueba
+          </button>
+          <button type="button" class="btn danger" id="btn-reject-prove">
+            Rechazar
+          </button>
+        </div>
+      </aside>
 
       <!-- Backup obligatorio al crear wallet -->
       <aside class="backup" id="backup-panel" hidden>
@@ -63,23 +173,34 @@
         <p class="muted">Sin identidad. Crea o importa una clave.</p>
       </section>
 
-      <nav class="tabs" role="tablist">
+      <nav class="tabs" role="tablist" id="tab-nav">
         <button class="tab active" data-tab="home" type="button">Inicio</button>
-        <button class="tab" data-tab="sign" type="button">Firmar</button>
-        <button class="tab" data-tab="vc" type="button">VCs</button>
-        <button class="tab" data-tab="disco" type="button">DisCO</button>
-        <button class="tab" data-tab="names" type="button">Nombres</button>
-        <button class="tab" data-tab="settings" type="button">Red</button>
+        <button class="tab" data-tab="vc" data-mode="holder" type="button">
+          Credenciales
+        </button>
+        <button class="tab" data-tab="sign" data-mode="lab" type="button" hidden>
+          Firmar
+        </button>
+        <button class="tab" data-tab="vc-lab" data-mode="lab" type="button" hidden>
+          Emitir
+        </button>
+        <button class="tab" data-tab="disco" data-mode="lab" type="button" hidden>
+          DisCO
+        </button>
+        <button class="tab" data-tab="names" data-mode="lab" type="button" hidden>
+          Nombres
+        </button>
+        <button class="tab" data-tab="settings" type="button">Ajustes</button>
       </nav>
 
       <main>
         <!-- INICIO -->
         <section class="panel active" id="panel-home">
-          <div class="card-block">
-            <h2>Identidad</h2>
+          <div class="card-block hero-home" id="home-onboarding">
+            <h2>Aura</h2>
             <p class="hint">
-              Crear genera mnemonic BIP39 → secp256k1 (EVM/PVM) + sr25519 +
-              ed25519 (Substrate).
+              Wallet Peranto: identidad possession-first. Las claves no salen
+              del dispositivo.
             </p>
             <div class="row">
               <button type="button" class="btn primary" id="btn-create-did">
@@ -114,12 +235,29 @@
                 Importar clave EVM
               </button>
             </div>
-            <button type="button" class="btn danger ghost" id="btn-clear-did">
-              Borrar identidad local
-            </button>
-            <button type="button" class="btn ghost" id="btn-reveal-secrets" hidden>
-              Ver mnemonic / PK guardados
-            </button>
+          </div>
+
+          <div class="card-block hero-home" id="home-dashboard" hidden>
+            <h2>Tu identidad</h2>
+            <div class="stat-row">
+              <div class="stat">
+                <span class="label">Red</span>
+                <span class="value" id="home-network-stat">—</span>
+              </div>
+              <div class="stat">
+                <span class="label">Vault</span>
+                <span class="value" id="home-cred-count">0</span>
+              </div>
+            </div>
+            <p class="hint" id="home-balance">Conectando…</p>
+            <div class="row wrap">
+              <button type="button" class="btn primary" id="btn-go-credentials">
+                Credenciales
+              </button>
+              <button type="button" class="btn" id="btn-copy-did">
+                Copiar DID
+              </button>
+            </div>
           </div>
 
           <div class="card-block">
@@ -133,15 +271,18 @@
             </button>
           </div>
 
-          <div class="card-block">
+          <div class="card-block" data-mode="lab" hidden>
             <h2>Attester (lab)</h2>
             <label>
               Schema
-              <input
-                type="text"
-                id="attester-schema"
-                value="peranto:EcoTestResult:v1"
-              />
+              <select id="attester-schema">
+                <option value="peranto:EcoTestResult:v1">EcoTestResult</option>
+                <option value="peranto:LivenessCheck:v1">LivenessCheck</option>
+                <option value="peranto:ProofOfResidence:v1">
+                  ProofOfResidence
+                </option>
+                <option value="peranto:Member:v1">Member</option>
+              </select>
             </label>
             <div class="row">
               <button type="button" class="btn primary" data-action="attester.join">
@@ -151,6 +292,15 @@
                 ¿Autorizado?
               </button>
             </div>
+          </div>
+
+          <div class="card-block">
+            <button type="button" class="btn danger ghost" id="btn-clear-did">
+              Borrar identidad local
+            </button>
+            <button type="button" class="btn ghost" id="btn-reveal-secrets" hidden>
+              Ver mnemonic / PK guardados
+            </button>
           </div>
         </section>
 
@@ -241,8 +391,40 @@
           </div>
         </section>
 
-        <!-- VCs -->
+        <!-- CREDENCIALES (holder) -->
         <section class="panel" id="panel-vc">
+          <div class="card-block">
+            <h2>Tu vault</h2>
+            <p class="hint">
+              Credenciales JWT guardadas localmente. Las dapps solo las ven tras
+              domain linkage + tu aprobación.
+            </p>
+            <div id="vault-list" class="vault"></div>
+          </div>
+
+          <div class="card-block">
+            <h2>Verificar / importar</h2>
+            <p class="hint">
+              Pega un JWT o un archivo <code>.peranto.json</code> (campo
+              <code>jwt</code>).
+            </p>
+            <label>
+              JWT
+              <textarea id="vc-jwt" rows="3" placeholder="eyJ…"></textarea>
+            </label>
+            <div class="row">
+              <button type="button" class="btn primary" data-action="vc.verify">
+                Verificar
+              </button>
+              <button type="button" class="btn" data-action="vc.import">
+                Guardar en vault
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <!-- EMITIR (lab) -->
+        <section class="panel" id="panel-vc-lab">
           <div class="card-block">
             <h2>Emitir EcoTest</h2>
             <label>
@@ -277,22 +459,6 @@
           </div>
 
           <div class="card-block">
-            <h2>Verificar / importar</h2>
-            <label>
-              JWT
-              <textarea id="vc-jwt" rows="3" placeholder="eyJ…"></textarea>
-            </label>
-            <div class="row">
-              <button type="button" class="btn primary" data-action="vc.verify">
-                Verificar
-              </button>
-              <button type="button" class="btn" data-action="vc.import">
-                Guardar en vault
-              </button>
-            </div>
-          </div>
-
-          <div class="card-block">
             <h2>Revocar</h2>
             <label>
               credHash
@@ -305,11 +471,6 @@
             <button type="button" class="btn danger" data-action="vc.revoke">
               Revocar on-chain
             </button>
-          </div>
-
-          <div class="card-block">
-            <h2>Vault local</h2>
-            <div id="vault-list" class="vault"></div>
           </div>
         </section>
 
@@ -421,16 +582,37 @@
         <!-- Settings -->
         <section class="panel" id="panel-settings">
           <div class="card-block">
+            <h2>Modo de interfaz</h2>
+            <p class="hint">
+              <strong>Holder</strong> — credenciales y autorización (estilo
+              Sporran). <strong>Lab</strong> — emitir, DisCO, firmas.
+            </p>
+            <label>
+              Modo
+              <select id="settings-ui-mode">
+                <option value="holder">Holder</option>
+                <option value="lab">Lab / attester</option>
+              </select>
+            </label>
+            <button type="button" class="btn primary" id="btn-save-mode">
+              Guardar modo
+            </button>
+          </div>
+          <div class="card-block">
             <h2>Red</h2>
+            <p class="hint">
+              Hoy <strong>Paseo</strong> es la red con deploy Peranto. Otras
+              cadenas quedan listas; importa el JSON de contratos al activarlas.
+            </p>
             <label>
               Network
               <select id="settings-network">
-                <option value="paseo">paseo (Hub TestNet)</option>
-                <option value="hardhat">hardhat / localhost</option>
-                <option value="baseSepolia">baseSepolia</option>
-                <option value="base">base mainnet</option>
-                <option value="arbitrumSepolia">arbitrumSepolia</option>
-                <option value="arbitrum">arbitrum One</option>
+                <option value="paseo">Paseo Hub (activa)</option>
+                <option value="hardhat">Hardhat / localhost</option>
+                <option value="baseSepolia">Base Sepolia (pronto)</option>
+                <option value="base">Base mainnet (pronto)</option>
+                <option value="arbitrumSepolia">Arbitrum Sepolia (pronto)</option>
+                <option value="arbitrum">Arbitrum One (pronto)</option>
               </select>
             </label>
             <label>
@@ -466,6 +648,17 @@
               Probar RPC / contratos
             </button>
             <pre class="mono tiny" id="settings-addresses"></pre>
+          </div>
+          <div class="card-block">
+            <h2>Sitios de confianza</h2>
+            <p class="hint">
+              Orígenes con DomainLinkage verificado (cache ~1h). Las dapps deben
+              publicar <code>/.well-known/did-configuration.json</code>.
+            </p>
+            <div id="trusted-sites" class="vault"></div>
+            <button type="button" class="btn danger ghost" id="btn-forget-all-sites">
+              Olvidar todos
+            </button>
           </div>
         </section>
       </main>
