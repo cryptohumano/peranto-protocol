@@ -1,0 +1,20 @@
+{
+  "name": "@peranto/aura-lab",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Local dapp to exercise Aura Save / Share / authorize flows",
+  "scripts": {
+    "dev": "vite --port 5174 --strictPort",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview --port 5174 --strictPort"
+  },
+  "dependencies": {
+    "@peranto/sdk": "*",
+    "viem": "^2.21.54"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2",
+    "vite": "^6.0.3"
+  }
+}

@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Aura Lab — Save / Share</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Newsreader:opsz,wght@6..72,500;6..72,600&family=Source+Sans+3:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header>
+        <p class="eyebrow">Peranto · Aura Lab</p>
+        <h1>Probar Aura Wallet</h1>
+        <p class="lede">
+          dApp local con DomainLinkage. Autoriza el origen, guarda una VC de
+          demo y pide una presentación (Save / Share).
+        </p>
+      </header>
+
+      <section class="card">
+        <h2>Estado</h2>
+        <pre id="meta" class="mono">Cargando…</pre>
+        <pre id="aura" class="mono">Aura: …</pre>
+      </section>
+
+      <section class="card">
+        <h2>1 · Sesión</h2>
+        <p class="hint">
+          Abre Aura, crea/importa wallet en Paseo. Luego autoriza este origen
+          cuando Aura lo pida.
+        </p>
+        <div class="row">
+          <button type="button" id="btn-detect">Detectar Aura</button>
+          <button type="button" id="btn-session" class="primary">
+            Request session
+          </button>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>2 · Emitir + Guardar</h2>
+        <p class="hint">
+          El lab firma un JWT y Aura debe <strong>abrirse sola</strong> para
+          aprobar «Guardar». Si no, haz clic en el icono Aura (badge
+          <code>!</code>). No hace falta descargar JSON: la VC va al vault.
+          Opcional: descarga el JWT para importarlo a mano en Credenciales.
+        </p>
+        <div class="row">
+          <button type="button" id="btn-save-live" class="primary">
+            Emitir + guardar Liveness
+          </button>
+          <button type="button" id="btn-save-res">
+            Emitir + guardar Residence
+          </button>
+          <button type="button" id="btn-download-jwt" disabled>
+            Descargar JSON
+          </button>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>3 · Presentar + verificar</h2>
+        <p class="hint">
+          <strong>Credential</strong> = JWT completo.
+          <strong>Claims</strong> = solo campos (p.ej. <code>country</code>) sin
+          JWT. El lab verifica la firma del holder sobre el challenge.
+        </p>
+        <div class="row">
+          <button type="button" id="btn-share-live" class="primary">
+            Pedir Liveness (JWT)
+          </button>
+          <button type="button" id="btn-share-score">
+            Solo score
+          </button>
+          <button type="button" id="btn-share-country">Solo country</button>
+        </div>
+        <pre id="verify-out" class="mono log" hidden></pre>
+      </section>
+
+      <section class="card">
+        <h2>4 · ZK compliance gate (demo)</h2>
+        <p class="hint">
+          Prueba algebraica local: liveness + residence con vigencia, score ≥
+          umbral y país en allowlist — sin enviar claims al curator. Con
+          artefactos Groth16, el mismo API usa snarkjs.
+        </p>
+        <div class="row">
+          <button type="button" id="btn-zk-gate" class="primary">
+            Prove ZK gate (MX allowlist)
+          </button>
+        </div>
+        <pre id="zk-out" class="mono log" hidden></pre>
+      </section>
+
+      <section class="card">
+        <h2>Log</h2>
+        <pre id="log" class="mono log"></pre>
+      </section>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
