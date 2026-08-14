@@ -4,7 +4,7 @@
 **Fecha:** 2026-07-14  
 **Autores:** Peranto  
 
-Documento canónico de **visión y diseño aterrizado** del protocolo (identidad SSI + núcleo económico DisCO en código). Para detalle normativo del método DID, ver [did-peranto-method.md](./did-peranto-method.md). Para fees y stake, ver [tokenomics.md](./tokenomics.md). Para despliegue en Paseo, ver [paseo-deploy.md](./paseo-deploy.md). Para **privacidad mínima y operaciones cooperativas**, ver [research-privacy-cooperatives.md](./research-privacy-cooperatives.md).
+Documento canónico de **visión y diseño aterrizado** del protocolo (identidad SSI + núcleo económico DisCO en código). Para detalle normativo del método DID, ver [did-peranto-method.md](./did-peranto-method.md). Para fees y stake, ver [tokenomics.md](./tokenomics.md). Para despliegue en Paseo, ver [paseo-deploy.md](./paseo-deploy.md). Para **privacidad mínima y operaciones cooperativas**, ver [research-privacy-cooperatives.md](./research-privacy-cooperatives.md). Diagramas de flujos SDK / registries / tesorerías / Aura: [architecture-flows.md](./architecture-flows.md). **Domain linkage / well-known (confianza dapp↔DID):** [well-known-did-configuration.md](./well-known-did-configuration.md).
 
 ---
 
@@ -309,6 +309,8 @@ No es obligatorio emitir una VC por cada micro-tip si el tip ya está en el cont
 | `peranto:CareContribution:v1` | Care | Cuidado interno o federado |
 | `peranto:TipReceipt:v1` | Tip | Recibo portable de tip ([JSON Schema](../schemas/TipReceipt.v1.json)) |
 | `peranto:EcoTestResult:v1` | Livelihood / técnico | Demo vertical actual (MVP) |
+| `peranto:LivenessCheck:v1` | Compliance | Score de liveness + expiry ([JSON Schema](../schemas/LivenessCheck.v1.json)) |
+| `peranto:ProofOfResidence:v1` | Compliance | Residencia vía PoA ([JSON Schema](../schemas/ProofOfResidence.v1.json)); ver [compliance-residence-liveness.md](./compliance-residence-liveness.md) |
 
 Los claims detallados viven off-chain; on-chain: `schemaId` + `credHash` + subject + attester.
 

@@ -2,16 +2,17 @@
 
 > Protocol overview: [protocolo-peranto.md](./protocolo-peranto.md).  
 > DIF / W3C registration checklist: [dif-w3c-compliance.md](./dif-w3c-compliance.md).  
-> Resolve performance / registry storage: [perf-rpc-did-resolve.md](./perf-rpc-did-resolve.md).
+> Resolve performance / registry storage: [perf-rpc-did-resolve.md](./perf-rpc-did-resolve.md).  
+> **Domain linkage / well-known (dapp “server cert”):** [well-known-did-configuration.md](./well-known-did-configuration.md).
 
 | Field | Value |
 |-------|--------|
-| **Status** | Spec v0.2.1 |
+| **Status** | Spec v0.2.2 |
 | **Method name** | `peranto` |
 | **DID Core** | Aims to satisfy Create, Read (Resolve), Update, Deactivate |
 | **Author** | Peranto / cryptohumano |
-| **Version** | `0.2.1` |
-| **Date** | 2026-07-17 |
+| **Version** | `0.2.2` |
+| **Date** | 2026-08-12 |
 
 ## Abstract
 
@@ -85,6 +86,15 @@ When a `DIDRegistry` (method v0.2+) is configured for that network, resolvers MU
 | On-chain `name` | `did/svc/<Type>` or `did/svc/<Type>.<slot>` as bytes32 (ASCII, ≤32 bytes) |
 | On-chain `value` | UTF-8 JSON `{ "id"?, "type", "serviceEndpoint", "name"? }` or plain UTF-8 endpoint string |
 | `validity` | Seconds from `now` at write time; `0` clears storage and expires |
+
+**Recommended service types**
+
+| `type` | Attribute name example | Purpose |
+|--------|------------------------|---------|
+| `LinkedDomains` | `did/svc/LinkedDomain` | Claimed HTTPS origin(s) for the DID (discovery hint) |
+| `Website` | `did/svc/Website` / `did/svc/Website.blog` | Public web endpoints |
+
+`LinkedDomains` alone is **not** proof of domain control. Wallets that mediate dapp credential APIs MUST verify [Well-Known DID Configuration](./well-known-did-configuration.md) (DomainLinkageCredential at `/.well-known/did-configuration.json`) before treating the origin as bound to the DID.
 
 ### Delegates → Document relationships (v0.2)
 
@@ -174,6 +184,7 @@ Public Hub TestNet addresses used by the reference implementation / Universal Re
 - Attester stake and credential status are separate from DID existence.
 - Do not put PII in on-chain attributes or events.
 - v0.2 storage removes lookback omission for attributes written after the upgrade; legacy event-only registries remain best-effort within RPC lookback.
+- **Domain linkage (v0.2.2):** dapps and attester UIs that talk to Aura MUST publish DIF Well-Known DID Configuration; wallets MUST fail closed on sensitive APIs if verification fails. See [well-known-did-configuration.md](./well-known-did-configuration.md).
 
 ## Companion registries (out of DID Document)
 
@@ -190,6 +201,7 @@ Public Hub TestNet addresses used by the reference implementation / Universal Re
 | Component | Location |
 |-----------|----------|
 | Spec (this document) | `docs/did-peranto-method.md` |
+| Domain linkage profile | `docs/well-known-did-configuration.md` |
 | SDK resolve | `@peranto/sdk` → `PerantoClient.resolveDid` |
 | DIF-compatible driver | `packages/uni-resolver-driver-did-peranto` |
 | Portal | `packages/web` |
@@ -204,11 +216,13 @@ Public Hub TestNet addresses used by the reference implementation / Universal Re
 | Update | Owner + scoped `svc` delegate for services |
 | Deactivate | `deactivate` + flag on resolve |
 | Security considerations | Documented |
+| Domain linkage (dapp origin) | Profile in [well-known-did-configuration.md](./well-known-did-configuration.md) |
 
 **Out of scope of “method compliance”:** listing in W3C DID Method Registry and DIF Universal Resolver (see [dif-w3c-compliance.md](./dif-w3c-compliance.md)).
 
 ## Changelog
 
+- **0.2.2** (2026-08-12) — Recommended `LinkedDomains` service; normative Well-Known DID Configuration profile for Aura/dapp trust (DIF DomainLinkageCredential).
 - **0.2.1** (2026-07-17) — Purpose keys: `did/vm/*` attrs; BIP44 paths `…/0|1|2` + hard URI keyAgreement; Document `keyAgreement`; JWT-VC may sign with assertion key (`kid`).
 - **0.2** (2026-07-17) — On-chain attribute storage + enumerable delegates; `svc` / `sigAuth` / `veriKey` scopes; Document `capabilityInvocation`; resolve prefers storage over event lookback.
 - **0.1** (2026-07-15) — First public method spec: networks, Document shape, Paseo registry, CRUD mapping, driver pointer.
