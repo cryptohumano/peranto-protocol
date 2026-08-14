@@ -1,8 +1,8 @@
 # Bounty compliance proposal — residence + liveness (Peranto)
 
 **Audience:** Kusama privacy/identity bounty curators (Brenzi et al.)  
-**Status:** implementation proposal + progress snapshot (2026-08)  
-**Related:** [compliance-residence-liveness.md](./compliance-residence-liveness.md) · [architecture-flows.md](./architecture-flows.md) · [`packages/zk-compliance`](../packages/zk-compliance/README.md)
+**Status:** implementation + working e2e (2026-08-14)  
+**Related:** [compliance-residence-liveness.md](./compliance-residence-liveness.md) · [architecture-flows.md](./architecture-flows.md) · [`packages/zk-compliance`](../packages/zk-compliance/README.md) · attester [`peranto-attestation`](https://github.com/cryptohumano/peranto-attestation)
 
 ---
 
@@ -62,29 +62,35 @@ So the gate must be:
 `CredentialStatusRegistry.anchorV2(credHash, schemaId, subject, validUntil, claimsCommitment, …)`:
 
 - `isValid(credHash)` ⇔ status Active **and** (`validUntil == 0` ∨ `block.timestamp ≤ validUntil`)
-- `claimsCommitment = keccak256(abi.encode(schemaKind, countryCode, scoreBps, expiresAtUnix, subject, salt))`
+- `claimsCommitment = Poseidon-7(version=2, schemaKind, countryCode, scoreBps, expiresAtUnix, subject, salt)` (BN254 / Circom-compatible; same hash as the Noir gate)
+- Credential **ids** on-chain remain keccak (`credHash`). Only the ZK-facing commitment is Poseidon.
 - Legacy `anchor` remains for non-compliance VCs (`validUntil = 0`)
 
 ### 3.3 ZK compliance gate
 
+Policy proved in zero knowledge: **notExpired ∧ scoreBps ≥ T ∧ country ∈ allowlist**. Salts never leave Aura.
+
 ```text
-Didit → attester (TTL + commitment + anchorV2)
+Didit → attester (TTL + Poseidon commitment + anchorV2)
               ↓
          Aura vault (JWT + salt)
               ↓
-    proveComplianceGate (algebraic now / Groth16 when artifacts built)
+    UltraHonk prove in Aura popup (Noir ComplianceGate + bb.js)
               ↓
- ComplianceZkVerifier.verifyGate + registry isValid
+    Attester verifyComplianceGateHonk (off-chain) + isValid / commitments
               ↓
-         Curator payout (no claims revealed)
+         Curator inbox (no claims revealed)
 ```
 
 Public signals: `liveCommitment`, `resCommitment`, `minScoreBps`, `allowlistRoot`, `now`.  
-Circuit source: [`packages/zk-compliance/circuits/ComplianceGate.circom`](../packages/zk-compliance/circuits/ComplianceGate.circom).  
-On-chain binder: `ComplianceZkVerifier` (optional Groth16 verifier address).
+Circuit: [`packages/zk-compliance/noir/src/main.nr`](../packages/zk-compliance/noir/src/main.nr) (Poseidon `hash_7` / `hash_8`).  
+On-chain today: `CredentialStatusRegistry.isValid` + commitment/policy binding.  
+On-chain SNARK: `ComplianceZkVerifier.verifyGateHonk` is wired (`setHonk`) but Aztec’s generated `HonkVerifier.sol` **does not compile** with solc/Foundry (stack too deep). We do not wait on that file.
 
-**Production path for Brenzi R4:** ZK / public-signals only.  
-**Fallback (debug):** JWT or claims presentation — not the preferred curator UX.
+**If we need a SNARK on Paseo and bb never ships a compilable verifier:** Groth16 over the **same Poseidon witness** (`setGroth16` / `verifyGate` already on the contract). That Solidity verifier *does* compile. Honk stays the wallet/attester prover; Groth16 is the EVM port.
+
+**Production path for Brenzi R4:** ZK / public-signals only (Honk verified at the attester).  
+**Fallback (debug):** claims presentation — not the preferred curator UX.
 
 ### 3.4 Architecture (full)
 
@@ -99,16 +105,16 @@ peranto-attestation
     │  anchorV2(validUntil, claimsCommitment)
     ▼
 Aura vault
-    │  Save / Share / prove ZK gate
+    │  Save / Share / prove UltraHonk (Noir + bb.js)
     ▼
-Curator gate
-    │  verifyGate / verifyComplianceGatePublic
+Curator inbox (attest.peranto.app)
+    │  Honk verify off-chain + isValid + commitments
     │  NO documents, NO face video, NO claim values (ZK mode)
 ```
 
 ### 3.5 Pilot commercial stance
 
-- **No fee to curators** for this bounty pilot.
+- Implementation of this specific compliance/attestation operation logic: **USD 3,500 nice-to-have / negotiable** (not a blocker for the bounty process).
 - Applicants may pay Didit (or other provider) fees.
 - Protocol `anchorFee` can stay off / zero for the pilot.
 
@@ -124,18 +130,15 @@ zkMe is a packaged zkKYC / zkPoA product. This proposal is an **open Polkadot/Hu
 |-------------|--------|
 | Design note (residence ≠ citizenship, no curator PII) | Done |
 | Schemas Liveness + Residence + register/smoke | Done |
-| Aura wallet: DomainLinkage, authorize, Save, Share | Done |
-| Selective claims presentation + `verifyPresentation` | Done |
-| Aura Lab (local dapp) for Save / Share / verify | Done |
-| Attester scaffold `peranto-attestation` + `/v1/issue` | Done |
-| On-chain `validUntil` + `claimsCommitment` (`anchorV2`, `isValid`) | Done |
-| Attester TTL 30d/90d + commitment + `ANCHOR=true` → `anchorV2` | Done |
-| `ComplianceZkVerifier` + algebraic prove/verify + Aura Lab demo | Done |
-| Circom `ComplianceGate` + `build:circuit` (needs circom on PATH) | Done (artifacts optional) |
-| Didit session create + webhook → issue VCs | In progress (sandbox API key) |
-| Full Groth16 ceremony → on-chain snark verifier | Pending (ops / circom) |
-| Curator gate UI (allowlist policy page) | Pending |
-| Public HTTPS attester + Didit webhook tunnel | Pending (ops) |
+| Aura wallet: DomainLinkage, authorize, Save, Share (selective claims) | Done |
+| On-chain `validUntil` + Poseidon `claimsCommitment` (`anchorV2`, `isValid`) | Done |
+| Attester `peranto-attestation`: Didit → TTL 30d/90d → `anchorV2` → Aura Save | Done |
+| Public HTTPS attester + webhook (`https://attest.peranto.app`) | Done |
+| Curator inbox (ZK vs claims, no Didit PII) | Done |
+| Noir `ComplianceGate` + UltraHonk prove in Aura (`bb.js`) | Done (e2e) |
+| Attester `verifyComplianceGateHonk` before inbox PASS | Done |
+| `ComplianceZkVerifier.verifyGateHonk` + `setHonk` slot | Code ready; **not deployed** (generated Solidity does not compile) |
+| Groth16 Poseidon port → on-chain snark if bb verifier never compiles | Fallback (not started) |
 
 Repos:
 
@@ -150,8 +153,8 @@ Repos:
 2. Open attestation portal → start Didit session (vendor_data = DID).
 3. Complete liveness (± PoA) in Didit.
 4. Attester issues VCs with TTL → `anchorV2` → **Save** into Aura (keep `commitmentSalt`).
-5. At payout: **Prove ZK gate** (or Share claims for debug).
-6. Curator runs `ComplianceZkVerifier` / SDK verify + policy; approve payout.
+5. At payout: **Prove ZK** in Aura (UltraHonk). Attester verifies the proof + on-chain `isValid`; curator never sees score/country.
+6. Curator reviews inbox (optional Formstr ref + applicant note) and approves payout.
 
 ---
 
@@ -173,8 +176,9 @@ Gm Brenzi — proposal to unblock compliance without curator PII:
 • Residence ≠ citizenship: PoA → ProofOfResidence VC (country claims only).
 • Liveness → LivenessCheck VC (score + expiry).
 • Each VC gets a fixed TTL (30d / 90d) anchored on-chain (validUntil + claimsCommitment).
-• Holder proves not-expired ∧ score≥T ∧ country∈allowlist in ZK; curators never see PDFs/face/claims.
-• Pilot free for this bounty; open Hub-native stack vs waiting on zkMe.
+• Holder proves not-expired ∧ score≥T ∧ country∈allowlist in ZK (UltraHonk in Aura; attester verifies; salts never leave the wallet). Curators never see PDFs/face/claims.
+• On-chain today: isValid + Poseidon commitments. Full SNARK on Paseo is a follow-up (Groth16 port if Aztec’s Solidity verifier never compiles).
+• Pilot fee negotiable nice to have $3,500 USD for this implementation of specific operation logic; open Hub-native stack vs waiting on zkMe.
 
 Design: docs/compliance-residence-liveness.md
 Proposal: docs/bounty-compliance-proposal.md
