@@ -22,6 +22,11 @@ import {
 import { formatDid } from "@peranto/sdk";
 import type { Address } from "viem";
 import { shortAddr, cn } from "@/lib/utils";
+import {
+  loadPaymentTokens,
+  type PaymentTokenMeta,
+  NATIVE_PAYMENT,
+} from "@/lib/payment-tokens";
 
 type MemberNode = {
   address: Address;
@@ -36,7 +41,7 @@ type Props = {
   pageRef: string;
   /** Owner-preferred DisCO (from PerantoPage). */
   preferredNode?: Address;
-  /** Owner-suggested default tip (PAS). */
+  /** Owner-suggested default tip amount (in selected token units). */
   defaultAmt?: string;
 };
 
@@ -67,6 +72,8 @@ export function PublicLoveInvite({
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
+  const [payTokens, setPayTokens] = useState<PaymentTokenMeta[]>([NATIVE_PAYMENT]);
+  const [payToken, setPayToken] = useState<PaymentTokenMeta>(NATIVE_PAYMENT);
 
   const who = handle ? `@${handle}` : shortAddr(profileAddress);
 
@@ -92,6 +99,18 @@ export function PublicLoveInvite({
     };
     window.addEventListener("peranto:session", onSession);
     return () => window.removeEventListener("peranto:session", onSession);
+  }, []);
+
+  useEffect(() => {
+    void loadPaymentTokens()
+      .then((tokens) => {
+        setPayTokens(tokens);
+        setPayToken(tokens[0] ?? NATIVE_PAYMENT);
+      })
+      .catch(() => {
+        setPayTokens([NATIVE_PAYMENT]);
+        setPayToken(NATIVE_PAYMENT);
+      });
   }, []);
 
   useEffect(() => {
@@ -217,8 +236,17 @@ export function PublicLoveInvite({
     setErr("");
     setMsg("");
     try {
-      await portalTip(node as Address, profileAddress, tipAmt, session);
-      setMsg(`Love enviado a ${who} (${tipAmt} PAS). Tú ganaste Care.`);
+      await portalTip(
+        node as Address,
+        profileAddress,
+        tipAmt,
+        session,
+        payToken.address,
+        payToken.decimals
+      );
+      setMsg(
+        `Love enviado a ${who} (${tipAmt} ${payToken.symbol}). Tú ganaste Care.`
+      );
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
     } finally {
@@ -248,8 +276,32 @@ export function PublicLoveInvite({
 
   const amountPicker = (
     <div className="mt-4 w-full max-w-xs">
+      {payTokens.length > 1 && (
+        <>
+          <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-[#f3efe6]/45">
+            Token
+          </p>
+          <select
+            className="mb-3 w-full rounded-xl border border-white/15 bg-black/25 px-3 py-2 text-sm text-[#f3efe6]"
+            value={payToken.address}
+            onChange={(e) => {
+              const next =
+                payTokens.find((t) => t.address === e.target.value) ??
+                NATIVE_PAYMENT;
+              setPayToken(next);
+            }}
+          >
+            {payTokens.map((t) => (
+              <option key={t.address} value={t.address}>
+                {t.symbol}
+                {t.native ? " (nativo)" : ""}
+              </option>
+            ))}
+          </select>
+        </>
+      )}
       <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-[#f3efe6]/45">
-        Monto (PAS)
+        Monto ({payToken.symbol})
       </p>
       <div className="flex flex-wrap justify-center gap-1.5">
         {TIP_AMOUNT_PRESETS.map((p) => (
@@ -286,7 +338,8 @@ export function PublicLoveInvite({
         className="mt-2 w-full rounded-xl border border-white/15 bg-black/25 px-3 py-2 text-center text-sm tabular-nums text-[#f3efe6] placeholder:text-[#f3efe6]/30"
       />
       <p className="mt-1.5 text-[10px] text-[#f3efe6]/35">
-        El monto no cambia el +1 Care/Love — solo el PAS transferido
+        El monto no cambia el +1 Care/Love — solo el {payToken.symbol}{" "}
+        transferido
       </p>
     </div>
   );
@@ -362,7 +415,7 @@ export function PublicLoveInvite({
           className="mt-4 inline-flex items-center gap-1.5 text-sm font-semibold text-[#c4a35a] underline-offset-2 hover:underline"
         >
           <Heart className="size-3.5" />
-          Toca para dar Love · {amt} PAS
+          Toca para dar Love · {amt} {payToken.symbol}
         </button>
       </section>
 
@@ -466,7 +519,7 @@ export function PublicLoveInvite({
                 ) : (
                   <Heart className="size-3.5" />
                 )}
-                Confirmar Love · {amt} PAS
+                Confirmar Love · {amt} {payToken.symbol}
               </Button>
             )}
 

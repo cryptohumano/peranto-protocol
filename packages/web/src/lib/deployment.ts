@@ -6,6 +6,12 @@ export type DeploymentJson = {
   chainId: number;
   contracts: ContractAddresses & Record<string, Address | null | undefined>;
   schemas?: Record<string, string>;
+  paymentTokens?: Array<{
+    address: string;
+    symbol: string;
+    decimals: number;
+    native: boolean;
+  }>;
 };
 
 export const PASEO_CHAIN_ID = 420420417;

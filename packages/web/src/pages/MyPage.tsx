@@ -1195,7 +1195,7 @@ export function MyPagePage() {
                   )}
                 </div>
                 <div>
-                  <Label>Monto sugerido (PAS)</Label>
+                  <Label>Monto sugerido</Label>
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     {TIP_AMOUNT_PRESETS.map((p) => (
                       <button

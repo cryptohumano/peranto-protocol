@@ -1,0 +1,25 @@
+{
+  "$id": "peranto:LivenessCheck:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "LivenessCheck",
+  "type": "object",
+  "required": ["provider", "score", "checkedAt", "expiresAt"],
+  "properties": {
+    "provider": {
+      "type": "string",
+      "description": "Vendor or service that performed the liveness / anti-spoof check"
+    },
+    "score": {
+      "type": ["number", "string"],
+      "description": "Liveness or anti-spoof score from the provider"
+    },
+    "checkedAt": { "type": "string", "format": "date-time" },
+    "expiresAt": { "type": "string", "format": "date-time" },
+    "subjectDid": { "type": "string" },
+    "sessionId": {
+      "type": "string",
+      "description": "Optional opaque provider session id (not biometric data)"
+    }
+  },
+  "additionalProperties": true
+}

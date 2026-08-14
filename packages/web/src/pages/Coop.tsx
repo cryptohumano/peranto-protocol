@@ -25,6 +25,11 @@ import {
 } from "@/lib/client";
 import { cn, shortAddr } from "@/lib/utils";
 import { formatPas } from "@/lib/format";
+import {
+  loadPaymentTokens,
+  type PaymentTokenMeta,
+  NATIVE_PAYMENT,
+} from "@/lib/payment-tokens";
 
 type NodeMeta = {
   address: Address;
@@ -43,6 +48,8 @@ export function CoopPage() {
   const [reserveFloor, setReserveFloor] = useState("0");
   const [tipTo, setTipTo] = useState("");
   const [tipAmt, setTipAmt] = useState("0.01");
+  const [payTokens, setPayTokens] = useState<PaymentTokenMeta[]>([NATIVE_PAYMENT]);
+  const [payToken, setPayToken] = useState<PaymentTokenMeta>(NATIVE_PAYMENT);
   const [memberAddr, setMemberAddr] = useState("");
   const [scores, setScores] = useState<{ love: bigint; care: bigint; period: bigint } | null>(
     null
@@ -53,6 +60,15 @@ export function CoopPage() {
   const [busy, setBusy] = useState(false);
   const [showOps, setShowOps] = useState(false);
   const session = loadSession();
+
+  useEffect(() => {
+    void loadPaymentTokens()
+      .then((tokens) => {
+        setPayTokens(tokens);
+        setPayToken(tokens[0] ?? NATIVE_PAYMENT);
+      })
+      .catch(() => undefined);
+  }, []);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -311,7 +327,28 @@ export function CoopPage() {
             <CardTitle>Tip</CardTitle>
             <Label className="mt-2">To</Label>
             <Input value={tipTo} onChange={(e) => setTipTo(e.target.value)} />
-            <Label className="mt-2">PAS</Label>
+            {payTokens.length > 1 && (
+              <>
+                <Label className="mt-2">Token</Label>
+                <select
+                  className="mt-1 flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
+                  value={payToken.address}
+                  onChange={(e) => {
+                    const next =
+                      payTokens.find((t) => t.address === e.target.value) ??
+                      NATIVE_PAYMENT;
+                    setPayToken(next);
+                  }}
+                >
+                  {payTokens.map((t) => (
+                    <option key={t.address} value={t.address}>
+                      {t.symbol}
+                    </option>
+                  ))}
+                </select>
+              </>
+            )}
+            <Label className="mt-2">{payToken.symbol}</Label>
             <Input value={tipAmt} onChange={(e) => setTipAmt(e.target.value)} />
             <Button
               className="mt-2"
@@ -323,7 +360,9 @@ export function CoopPage() {
                     selected as Address,
                     tipTo as Address,
                     tipAmt,
-                    session
+                    session,
+                    payToken.address,
+                    payToken.decimals
                   );
                   setMsg("Tip ok");
                 })
@@ -334,14 +373,22 @@ export function CoopPage() {
           </Card>
           <Card>
             <CardTitle>Contribute</CardTitle>
-            <FieldHint>80% nodo / 20% protocolo. Monto = campo Tip.</FieldHint>
+            <FieldHint>
+              80% nodo / 20% protocolo. Monto = campo Tip · token = selector.
+            </FieldHint>
             <Button
               className="mt-2"
               size="sm"
               disabled={busy || !selected || !session}
               onClick={() =>
                 run(async () => {
-                  await portalContribute(selected as Address, tipAmt, session);
+                  await portalContribute(
+                    selected as Address,
+                    tipAmt,
+                    session,
+                    payToken.address,
+                    payToken.decimals
+                  );
                   setMsg("Contribute ok");
                 })
               }

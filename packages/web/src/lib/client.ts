@@ -676,14 +676,25 @@ export async function portalTip(
   node: Address,
   to: Address,
   valueEther: string,
-  session?: SessionIdentity | null
+  session?: SessionIdentity | null,
+  token: Address = "0x0000000000000000000000000000000000000000",
+  decimals = 18
 ) {
+  const { parseUnits } = await import("viem");
+  const amount = valueEther.includes(".")
+    ? parseUnits(valueEther, decimals)
+    : parseUnits(valueEther, decimals);
   if (writeMode(session) === "aura") {
-    return auraAction("disco.tip", { node, to, value: valueEther });
+    // Aura tip path still uses ether-style string for native; pass token for multi-token deploys.
+    return auraAction("disco.tip", {
+      node,
+      to,
+      value: amount.toString(),
+      token,
+    });
   }
   const client = await getWriteClient(session);
-  const { parseEther } = await import("viem");
-  return client.tip(node, to, parseEther(valueEther));
+  return client.tip(node, to, amount, token);
 }
 
 /** Nodes where `account` is a member (for public tip / Love). */
@@ -695,14 +706,21 @@ export async function portalListMembershipNodes(account: Address) {
 export async function portalContribute(
   node: Address,
   valueEther: string,
-  session?: SessionIdentity | null
+  session?: SessionIdentity | null,
+  token: Address = "0x0000000000000000000000000000000000000000",
+  decimals = 18
 ) {
+  const { parseUnits } = await import("viem");
+  const amount = parseUnits(valueEther, decimals);
   if (writeMode(session) === "aura") {
-    return auraAction("disco.contribute", { node, value: valueEther });
+    return auraAction("disco.contribute", {
+      node,
+      value: amount.toString(),
+      token,
+    });
   }
   const client = await getWriteClient(session);
-  const { parseEther } = await import("viem");
-  return client.contribute(node, parseEther(valueEther));
+  return client.contribute(node, amount, token);
 }
 
 /** Native PAS/ETH transfer between EOAs (not a DisCO tip). */
