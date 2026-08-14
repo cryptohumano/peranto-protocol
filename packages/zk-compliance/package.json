@@ -1,0 +1,24 @@
+{
+  "name": "@peranto/zk-compliance",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "ComplianceGate circuit + prove/verify helpers for Peranto bounty gate",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json --noCheck",
+    "build:circuit": "node scripts/build-circuit.mjs",
+    "test": "node --import tsx --test src/**/*.test.ts"
+  },
+  "dependencies": {
+    "@peranto/sdk": "file:../sdk",
+    "snarkjs": "^0.7.5",
+    "viem": "^2.21.54"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}
