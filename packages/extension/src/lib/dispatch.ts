@@ -75,6 +75,8 @@ export async function dispatch(
         message.params ?? [],
         {
           origin: message.origin,
+          pathname: message.pathname,
+          pageHref: message.pageHref,
           didConfiguration: message.didConfiguration,
         }
       );

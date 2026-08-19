@@ -148,6 +148,8 @@ export type ExtensionMessage =
       params?: unknown[];
       /** Page origin from content script (`location.origin`). */
       origin?: string;
+      pathname?: string;
+      pageHref?: string;
       /** Optional pre-fetched `/.well-known/did-configuration.json`. */
       didConfiguration?: unknown;
     }

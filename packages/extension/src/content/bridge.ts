@@ -16,6 +16,8 @@ const SAFE_PERANTO_ACTIONS = new Set([
   "attester.isAuthorized",
 ]);
 
+let cachedConfig: { key: string; value: unknown } | null = null;
+
 function needsDomainLinkage(method: string, params: unknown[] = []): boolean {
   if (method === "wallet_getCredentials") return true;
   if (method === "peranto_requestSession") return true;
@@ -32,20 +34,50 @@ function needsDomainLinkage(method: string, params: unknown[] = []): boolean {
   return false;
 }
 
+function isDidConfiguration(value: unknown): boolean {
+  return (
+    Boolean(value) &&
+    typeof value === "object" &&
+    Array.isArray((value as { linked_dids?: unknown }).linked_dids)
+  );
+}
+
+function discoverUrls(origin: string): string[] {
+  const href = document
+    .querySelector('link[rel="did-configuration"]')
+    ?.getAttribute("href");
+  const urls = wellKnownDidConfigurationUrls(origin, {
+    pathname: window.location.pathname,
+    pageHref: window.location.href,
+  });
+  if (href) {
+    try {
+      const abs = new URL(href, window.location.href).href;
+      if (!urls.includes(abs)) urls.unshift(abs);
+    } catch {
+      /* ignore */
+    }
+  }
+  return urls;
+}
+
 async function fetchDidConfiguration(
   origin: string
 ): Promise<unknown | undefined> {
-  const urls = wellKnownDidConfigurationUrls(origin, {
-    pathname: window.location.pathname,
-  });
-  for (const url of urls) {
+  const key = `${origin}|${window.location.pathname}`;
+  if (cachedConfig?.key === key) return cachedConfig.value;
+
+  for (const url of discoverUrls(origin)) {
     try {
       const res = await fetch(url, {
         headers: { Accept: "application/json" },
         credentials: "omit",
       });
       if (!res.ok) continue;
-      return await res.json();
+      const json: unknown = await res.json();
+      if (!isDidConfiguration(json)) continue;
+      cachedConfig = { key, value: json };
+      return json;
     } catch {
       /* try next candidate (GitHub Pages subpath, etc.) */
     }
@@ -75,6 +107,8 @@ window.addEventListener("message", (ev) => {
         method,
         params,
         origin,
+        pathname: window.location.pathname,
+        pageHref: window.location.href,
         didConfiguration,
       },
       (response) => {

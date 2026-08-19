@@ -184,6 +184,7 @@ export async function requireDomainLinkage(opts: {
   expectedDid?: string;
   pathname?: string;
   wellKnownBasePath?: string;
+  pageHref?: string;
 }): Promise<TrustedSite> {
   const pageOrigin = normalizeOrigin(opts.pageOrigin);
   if (!pageOrigin) {
@@ -207,6 +208,7 @@ export async function requireDomainLinkage(opts: {
       resolveDid: (did) => client.resolveDid(did),
       pathname: opts.pathname,
       wellKnownBasePath: opts.wellKnownBasePath,
+      pageHref: opts.pageHref,
       fetchDidConfiguration: opts.didConfiguration
         ? undefined
         : async (url) => {

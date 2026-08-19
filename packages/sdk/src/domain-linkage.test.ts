@@ -42,13 +42,22 @@ test("originsMatch requires https for non-localhost", () => {
   );
 });
 
-test("wellKnownDidConfigurationUrls includes origin root and GitHub Pages subpath", () => {
+test("wellKnownDidConfigurationUrls skips origin root on GitHub project Pages", () => {
   const urls = wellKnownDidConfigurationUrls("https://cryptohumano.github.io", {
     pathname: "/peranto-protocol/",
+    pageHref: "https://cryptohumano.github.io/peranto-protocol/#/id",
   });
   assert.deepEqual(urls, [
     "https://cryptohumano.github.io/peranto-protocol/.well-known/did-configuration.json",
-    "https://cryptohumano.github.io/.well-known/did-configuration.json",
+  ]);
+});
+
+test("wellKnownDidConfigurationUrls keeps origin root on a custom domain", () => {
+  const urls = wellKnownDidConfigurationUrls("https://app.peranto.example", {
+    pathname: "/",
+  });
+  assert.deepEqual(urls, [
+    "https://app.peranto.example/.well-known/did-configuration.json",
   ]);
 });
 

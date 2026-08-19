@@ -57,6 +57,8 @@ function chainFor(network: PerantoNetwork) {
 
 export type ProviderRequestContext = {
   origin?: string;
+  pathname?: string;
+  pageHref?: string;
   didConfiguration?: unknown;
 };
 
@@ -84,6 +86,8 @@ export async function handleProviderRequest(
         | string
         | null
         | undefined,
+      pathname: ctx.pathname,
+      pageHref: ctx.pageHref,
     });
   }
 

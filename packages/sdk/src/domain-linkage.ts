@@ -379,12 +379,14 @@ export type VerifyDomainLinkageOptions = {
   wellKnownBasePath?: string;
   /** Browser pathname used to infer a project-site prefix (content scripts). */
   pathname?: string;
+  /** Full page URL (hash stripped internally) for GitHub Pages / Vite base. */
+  pageHref?: string;
 };
 
 /** Candidate URLs for DIF well-known, including subpath deployments. */
 export function wellKnownDidConfigurationUrls(
   pageOrigin: string,
-  opts?: { basePath?: string; pathname?: string }
+  opts?: { basePath?: string; pathname?: string; pageHref?: string }
 ): string[] {
   const urls: string[] = [];
   const add = (prefix: string) => {
@@ -398,13 +400,27 @@ export function wellKnownDidConfigurationUrls(
   const basePath = opts?.basePath?.trim();
   if (basePath) add(basePath.startsWith("/") ? basePath : `/${basePath}`);
 
-  if (opts?.pathname) {
-    const seg = opts.pathname.split("/").filter(Boolean)[0];
-    if (seg && !seg.includes(".")) add(`/${seg}`);
+  if (opts?.pageHref) {
+    try {
+      const u = new URL(opts.pageHref);
+      u.hash = "";
+      u.search = "";
+      const dir = u.pathname.endsWith("/")
+        ? u.pathname
+        : u.pathname.replace(/[^/]*$/, "");
+      if (dir && dir !== "/") add(dir);
+    } catch {
+      /* ignore */
+    }
   }
 
-  // Origin root last: GitHub project Pages 404s here; still valid for custom domains.
-  add("");
+  const pathSegs = (opts?.pathname ?? "").split("/").filter(Boolean);
+  if (pathSegs[0] && !pathSegs[0].includes(".")) add(`/${pathSegs[0]}`);
+
+  // GitHub project Pages cannot serve origin-root `/.well-known` (404).
+  const githubProject =
+    /\.github\.io$/i.test(new URL(pageOrigin).hostname) && pathSegs.length > 0;
+  if (!githubProject) add("");
 
   return urls;
 }
@@ -416,6 +432,7 @@ async function loadDidConfigurationFromWellKnown(
   const urls = wellKnownDidConfigurationUrls(pageOrigin, {
     basePath: opts.wellKnownBasePath,
     pathname: opts.pathname,
+    pageHref: opts.pageHref,
   });
   const fetchOne =
     opts.fetchDidConfiguration ??
