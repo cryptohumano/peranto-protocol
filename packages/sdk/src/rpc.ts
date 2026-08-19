@@ -1,31 +1,43 @@
 import { fallback, http, type Transport } from "viem";
 
 /**
- * Public Paseo eth-rpc endpoints, browser-first.
+ * Public Paseo eth-rpc for **browsers**.
  *
- * `services.polkadothub-rpc.com` often 429s; those error responses omit CORS,
- * so the browser logs CORS + retry storms. Keep Parity (`eth-rpc-testnet`) first.
+ * Do not include `services.polkadothub-rpc.com`: 429 responses omit CORS and
+ * viem fallback + getLogs turns that into a console flood.
  */
 export const PASEO_BROWSER_RPC_URLS = [
   "https://eth-rpc-testnet.polkadot.io/",
-  "https://services.polkadothub-rpc.com/testnet/",
 ] as const;
 
-const COOLDOWN_MS = 20_000;
+const HUB_RPC_HOST = "polkadothub-rpc.com";
+const COOLDOWN_MS = 30_000;
 let rpcCooldownUntil = 0;
+
+function isHubRpc(url: string): boolean {
+  return url.includes(HUB_RPC_HOST);
+}
 
 async function pacedFetch(
   input: RequestInfo | URL,
   init?: RequestInit
 ): Promise<Response> {
   if (Date.now() < rpcCooldownUntil) {
-    throw new Error("Peranto RPC cooldown after HTTP 429");
+    throw new Error("Peranto RPC cooldown after rate limit / CORS failure");
   }
-  const res = await fetch(input, init);
-  if (res.status === 429) {
-    rpcCooldownUntil = Date.now() + COOLDOWN_MS;
+  try {
+    const res = await fetch(input, init);
+    if (res.status === 429) {
+      rpcCooldownUntil = Date.now() + COOLDOWN_MS;
+    }
+    return res;
+  } catch (err) {
+    const url = String(typeof input === "string" ? input : input.toString());
+    if (isHubRpc(url)) {
+      rpcCooldownUntil = Date.now() + COOLDOWN_MS;
+    }
+    throw err;
   }
-  return res;
 }
 
 function uniqueUrls(rpcUrl?: string | readonly string[]): string[] {
@@ -37,12 +49,13 @@ function uniqueUrls(rpcUrl?: string | readonly string[]): string[] {
   const out: string[] = [];
   for (const u of raw) {
     const t = u?.trim();
-    if (t && !out.includes(t)) out.push(t);
+    if (!t || isHubRpc(t) || out.includes(t)) continue;
+    out.push(t);
   }
   return out.length ? out : [...PASEO_BROWSER_RPC_URLS];
 }
 
-/** Viem transport: low retries + failover, stop hammering on 429. */
+/** Viem transport: Parity only in browser, low retries, 429 cooldown. */
 export function createRpcTransport(
   rpcUrl?: string | readonly string[]
 ): Transport {
@@ -50,8 +63,7 @@ export function createRpcTransport(
   const transports = urls.map((url) =>
     http(url, {
       timeout: 15_000,
-      retryCount: 1,
-      retryDelay: 1_000,
+      retryCount: 0,
       fetch: pacedFetch,
     })
   );

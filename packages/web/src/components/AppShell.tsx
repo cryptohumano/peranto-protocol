@@ -97,12 +97,6 @@ export function AppShell() {
           saveSession({ ...s, displayName: name });
         }
         await refreshHoldings(s.address);
-        // Background: buscar txs del usuario y guardarlas en IndexedDB
-        void import("@/lib/activity-sync")
-          .then(({ syncUserActivity }) => syncUserActivity(s.address))
-          .catch(() => {
-            /* ignore offline / RPC */
-          });
       } catch {
         /* ignore */
       }
@@ -111,18 +105,9 @@ export function AppShell() {
       const cur = loadSession();
       if (cur) void refreshHoldings(cur.address);
     }, 30_000);
-    const activityTimer = window.setInterval(() => {
-      const cur = loadSession();
-      if (cur) {
-        void import("@/lib/activity-sync")
-          .then(({ syncUserActivity }) => syncUserActivity(cur.address))
-          .catch(() => undefined);
-      }
-    }, 120_000);
     return () => {
       window.removeEventListener("peranto:session", onSession);
       window.clearInterval(holdingsTimer);
-      window.clearInterval(activityTimer);
     };
   }, [refreshHoldings]);
 
