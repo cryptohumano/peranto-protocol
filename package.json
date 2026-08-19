@@ -26,6 +26,7 @@
     "extension:pack": "npm run extension:build && mkdir -p releases && rm -f releases/aura-wallet.zip && (cd packages/extension/dist && zip -r ../../../releases/aura-wallet.zip .)",
     "web:dev": "npm run dev -w @peranto/web",
     "web:build": "npm run build -w @peranto/web",
+    "portal:well-known": "tsx scripts/generate-portal-well-known.mts",
     "aura-lab": "npm run dev -w @peranto/aura-lab",
     "aura-lab:dev": "npm run dev -w @peranto/aura-lab",
     "schemas:register": "hardhat run scripts/register-schemas.ts",

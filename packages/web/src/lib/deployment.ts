@@ -39,4 +39,13 @@ export function deploymentToAddresses(d: DeploymentJson): ContractAddresses {
 }
 
 export const DEFAULT_NETWORK: PerantoNetwork = "paseo";
-export const DEFAULT_RPC = "https://eth-rpc-testnet.polkadot.io/";
+
+/** Public Paseo RPCs — primary first; viem/http retries on transport errors. */
+export const PASEO_RPC_URLS = [
+  import.meta.env.VITE_PERANTO_RPC_URL as string | undefined,
+  "https://services.polkadothub-rpc.com/testnet/",
+  "https://eth-rpc-testnet.polkadot.io/",
+].filter((u): u is string => Boolean(u?.trim()));
+
+export const DEFAULT_RPC =
+  PASEO_RPC_URLS[0] ?? "https://services.polkadothub-rpc.com/testnet/";

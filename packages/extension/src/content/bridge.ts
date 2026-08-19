@@ -2,6 +2,8 @@
  * Isolated content script: bridges page ↔ Aura service worker.
  * Fetches same-origin well-known DID configuration for sensitive APIs.
  */
+import { wellKnownDidConfigurationUrls } from "@peranto/sdk";
+
 const CHANNEL = "aura-peranto";
 
 const SAFE_PERANTO_ACTIONS = new Set([
@@ -33,16 +35,22 @@ function needsDomainLinkage(method: string, params: unknown[] = []): boolean {
 async function fetchDidConfiguration(
   origin: string
 ): Promise<unknown | undefined> {
-  try {
-    const res = await fetch(`${origin}/.well-known/did-configuration.json`, {
-      headers: { Accept: "application/json" },
-      credentials: "omit",
-    });
-    if (!res.ok) return undefined;
-    return await res.json();
-  } catch {
-    return undefined;
+  const urls = wellKnownDidConfigurationUrls(origin, {
+    pathname: window.location.pathname,
+  });
+  for (const url of urls) {
+    try {
+      const res = await fetch(url, {
+        headers: { Accept: "application/json" },
+        credentials: "omit",
+      });
+      if (!res.ok) continue;
+      return await res.json();
+    } catch {
+      /* try next candidate (GitHub Pages subpath, etc.) */
+    }
   }
+  return undefined;
 }
 
 window.addEventListener("message", (ev) => {

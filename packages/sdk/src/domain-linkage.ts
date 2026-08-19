@@ -372,7 +372,73 @@ export type VerifyDomainLinkageOptions = {
   /** Expected service DID (session). If set, must match issuer. */
   expectedDid?: string;
   allowHttp?: boolean;
+  /**
+   * Subpath prefix when the app is not at the origin root (GitHub Pages project
+   * sites, Vite `base`, etc.). Example: `/peranto-protocol`.
+   */
+  wellKnownBasePath?: string;
+  /** Browser pathname used to infer a project-site prefix (content scripts). */
+  pathname?: string;
 };
+
+/** Candidate URLs for DIF well-known, including subpath deployments. */
+export function wellKnownDidConfigurationUrls(
+  pageOrigin: string,
+  opts?: { basePath?: string; pathname?: string }
+): string[] {
+  const urls: string[] = [];
+  const add = (prefix: string) => {
+    const base = prefix.replace(/\/+$/, "");
+    const url = base
+      ? `${pageOrigin}${base}/.well-known/did-configuration.json`
+      : `${pageOrigin}/.well-known/did-configuration.json`;
+    if (!urls.includes(url)) urls.push(url);
+  };
+
+  add("");
+  const basePath = opts?.basePath?.trim();
+  if (basePath) add(basePath.startsWith("/") ? basePath : `/${basePath}`);
+
+  if (opts?.pathname) {
+    const seg = opts.pathname.split("/").filter(Boolean)[0];
+    if (seg && !seg.includes(".")) add(`/${seg}`);
+  }
+
+  return urls;
+}
+
+async function loadDidConfigurationFromWellKnown(
+  pageOrigin: string,
+  opts: VerifyDomainLinkageOptions
+): Promise<DidConfigurationDocument> {
+  const urls = wellKnownDidConfigurationUrls(pageOrigin, {
+    basePath: opts.wellKnownBasePath,
+    pathname: opts.pathname,
+  });
+  const fetchOne =
+    opts.fetchDidConfiguration ??
+    (async (url: string) => {
+      const res = await fetch(url, {
+        headers: { Accept: "application/json" },
+      });
+      if (!res.ok) {
+        throw new Error(`well-known HTTP ${res.status} (${url})`);
+      }
+      return (await res.json()) as DidConfigurationDocument;
+    });
+
+  let lastError: unknown = new Error("well-known not found");
+  for (const url of urls) {
+    try {
+      return await fetchOne(url);
+    } catch (e) {
+      lastError = e;
+    }
+  }
+  throw lastError instanceof Error
+    ? lastError
+    : new Error(String(lastError));
+}
 
 /**
  * Full wallet check: load well-known for pageOrigin, verify DomainLinkageCredential.
@@ -398,19 +464,7 @@ export async function verifyDomainLinkage(
           ? (JSON.parse(opts.didConfiguration) as DidConfigurationDocument)
           : opts.didConfiguration;
     } else {
-      const url = `${pageOrigin}/.well-known/did-configuration.json`;
-      const fetcher =
-        opts.fetchDidConfiguration ??
-        (async (u: string) => {
-          const res = await fetch(u, {
-            headers: { Accept: "application/json" },
-          });
-          if (!res.ok) {
-            throw new Error(`well-known HTTP ${res.status}`);
-          }
-          return (await res.json()) as DidConfigurationDocument;
-        });
-      config = await fetcher(url);
+      config = await loadDidConfigurationFromWellKnown(pageOrigin, opts);
     }
   } catch (e) {
     return {

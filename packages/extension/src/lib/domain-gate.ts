@@ -182,6 +182,8 @@ export async function requireDomainLinkage(opts: {
   pageOrigin: string;
   didConfiguration?: DidConfigurationDocument | string | null;
   expectedDid?: string;
+  pathname?: string;
+  wellKnownBasePath?: string;
 }): Promise<TrustedSite> {
   const pageOrigin = normalizeOrigin(opts.pageOrigin);
   if (!pageOrigin) {
@@ -203,6 +205,8 @@ export async function requireDomainLinkage(opts: {
       allowHttp,
       expectedDid: opts.expectedDid,
       resolveDid: (did) => client.resolveDid(did),
+      pathname: opts.pathname,
+      wellKnownBasePath: opts.wellKnownBasePath,
       fetchDidConfiguration: opts.didConfiguration
         ? undefined
         : async (url) => {
@@ -211,7 +215,7 @@ export async function requireDomainLinkage(opts: {
             });
             if (!res.ok) {
               throw new Error(
-                `Aura: no se pudo cargar well-known (${res.status}). La dapp debe publicar ${pageOrigin}/.well-known/did-configuration.json`
+                `Aura: no se pudo cargar well-known (${res.status}) en ${url}`
               );
             }
             return (await res.json()) as DidConfigurationDocument;

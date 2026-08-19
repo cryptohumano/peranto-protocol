@@ -133,7 +133,12 @@ const paseoChain = {
   name: "Polkadot Hub TestNet",
   nativeCurrency: { name: "PAS", symbol: "PAS", decimals: 18 },
   rpcUrls: {
-    default: { http: ["https://eth-rpc-testnet.polkadot.io/"] },
+    default: {
+      http: [
+        "https://services.polkadothub-rpc.com/testnet/",
+        "https://eth-rpc-testnet.polkadot.io/",
+      ],
+    },
   },
 } as const;
 

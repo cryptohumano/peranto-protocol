@@ -10,6 +10,7 @@ import {
   originsMatch,
   verifyDomainLinkage,
   verifyDomainLinkageJwt,
+  wellKnownDidConfigurationUrls,
 } from "./domain-linkage";
 import { derivePurposeKeys } from "./wallet";
 
@@ -39,6 +40,16 @@ test("originsMatch requires https for non-localhost", () => {
     originsMatch("http://localhost:5173", "http://localhost:5173"),
     true
   );
+});
+
+test("wellKnownDidConfigurationUrls includes origin root and GitHub Pages subpath", () => {
+  const urls = wellKnownDidConfigurationUrls("https://cryptohumano.github.io", {
+    pathname: "/peranto-protocol/",
+  });
+  assert.deepEqual(urls, [
+    "https://cryptohumano.github.io/.well-known/did-configuration.json",
+    "https://cryptohumano.github.io/peranto-protocol/.well-known/did-configuration.json",
+  ]);
 });
 
 test("issue + verify DomainLinkage against matching origin", async () => {

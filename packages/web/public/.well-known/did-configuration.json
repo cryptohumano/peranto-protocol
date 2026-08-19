@@ -1,0 +1,26 @@
+{
+  "@context": "https://identity.foundation/.well-known/did-configuration/v1",
+  "linked_dids": [
+    {
+      "@context": [
+        "https://www.w3.org/2018/credentials/v1",
+        "https://identity.foundation/.well-known/did-configuration/v1"
+      ],
+      "type": [
+        "VerifiableCredential",
+        "DomainLinkageCredential"
+      ],
+      "issuer": "did:peranto:paseo:0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+      "issuanceDate": "2026-08-19T03:42:56.888Z",
+      "expirationDate": "2031-08-18T03:42:56.788Z",
+      "credentialSubject": {
+        "id": "did:peranto:paseo:0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+        "origin": "https://cryptohumano.github.io"
+      },
+      "proof": {
+        "type": "JwtProof2020",
+        "jwt": "eyJhbGciOiJFUzI1NksiLCJ0eXAiOiJKV1QifQ.eyJpc3MiOiJkaWQ6cGVyYW50bzpwYXNlbzoweGYzOUZkNmU1MWFhZDg4RjZGNGNlNmFCODgyNzI3OWNmZkZiOTIyNjYiLCJzdWIiOiJkaWQ6cGVyYW50bzpwYXNlbzoweGYzOUZkNmU1MWFhZDg4RjZGNGNlNmFCODgyNzI3OWNmZkZiOTIyNjYiLCJpYXQiOjE3ODcxMTA5NzYsInZjIjp7IkBjb250ZXh0IjpbImh0dHBzOi8vd3d3LnczLm9yZy8yMDE4L2NyZWRlbnRpYWxzL3YxIl0sInR5cGUiOlsiVmVyaWZpYWJsZUNyZWRlbnRpYWwiLCJEb21haW5MaW5rYWdlQ3JlZGVudGlhbCJdLCJpc3N1ZXIiOiJkaWQ6cGVyYW50bzpwYXNlbzoweGYzOUZkNmU1MWFhZDg4RjZGNGNlNmFCODgyNzI3OWNmZkZiOTIyNjYiLCJpc3N1YW5jZURhdGUiOiIyMDI2LTA4LTE5VDAzOjQyOjU2Ljg0MloiLCJjcmVkZW50aWFsU3ViamVjdCI6eyJpZCI6ImRpZDpwZXJhbnRvOnBhc2VvOjB4ZjM5RmQ2ZTUxYWFkODhGNkY0Y2U2YUI4ODI3Mjc5Y2ZmRmI5MjI2NiIsIm9yaWdpbiI6Imh0dHBzOi8vY3J5cHRvaHVtYW5vLmdpdGh1Yi5pbyJ9LCJjcmVkZW50aWFsU2NoZW1hIjp7ImlkIjoicGVyYW50bzpEb21haW5MaW5rYWdlOnYxIiwidHlwZSI6Ikpzb25TY2hlbWEifX19.igyQk5O70HNPsT6bVWm1nDSdwDC-VEdbF1-V3_aFuKYKet7nLaQYhL1zOMSuHNPOidmZRceS2LMEWE6_s3G2yA"
+      }
+    }
+  ]
+}
