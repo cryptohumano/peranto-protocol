@@ -19,7 +19,7 @@ function isHubRpc(url: string): boolean {
 }
 
 async function pacedFetch(
-  input: RequestInfo | URL,
+  input: string | URL | Request,
   init?: RequestInit
 ): Promise<Response> {
   if (Date.now() < rpcCooldownUntil) {
@@ -32,7 +32,12 @@ async function pacedFetch(
     }
     return res;
   } catch (err) {
-    const url = String(typeof input === "string" ? input : input.toString());
+    const url =
+      typeof input === "string"
+        ? input
+        : input instanceof URL
+          ? input.href
+          : input.url;
     if (isHubRpc(url)) {
       rpcCooldownUntil = Date.now() + COOLDOWN_MS;
     }
@@ -64,7 +69,7 @@ export function createRpcTransport(
     http(url, {
       timeout: 15_000,
       retryCount: 0,
-      fetch: pacedFetch,
+      fetchFn: pacedFetch,
     })
   );
   if (transports.length === 1) return transports[0];
