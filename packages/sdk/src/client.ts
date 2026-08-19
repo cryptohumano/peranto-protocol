@@ -6,10 +6,10 @@ import {
   decodeEventLog,
   getAddress,
   getContract,
-  http,
   isAddress,
   parseEther,
 } from "viem";
+import { createRpcTransport, PASEO_BROWSER_RPC_URLS } from "./rpc";
 import { privateKeyToAccount } from "viem/accounts";
 import {
   arbitrum,
@@ -133,12 +133,7 @@ const paseoChain = {
   name: "Polkadot Hub TestNet",
   nativeCurrency: { name: "PAS", symbol: "PAS", decimals: 18 },
   rpcUrls: {
-    default: {
-      http: [
-        "https://services.polkadothub-rpc.com/testnet/",
-        "https://eth-rpc-testnet.polkadot.io/",
-      ],
-    },
+    default: { http: [...PASEO_BROWSER_RPC_URLS] },
   },
 } as const;
 
@@ -178,7 +173,7 @@ export class PerantoClient {
   constructor(opts: {
     network: PerantoNetwork;
     addresses: ContractAddresses;
-    rpcUrl?: string;
+    rpcUrl?: string | readonly string[];
     privateKey?: Hex;
     mnemonic?: string;
     assertionPrivateKey?: Hex;
@@ -189,7 +184,12 @@ export class PerantoClient {
     this.mnemonic = opts.mnemonic?.trim();
     this.assertionPrivateKey = opts.assertionPrivateKey;
     const chain = chainFor(opts.network);
-    const transport = http(opts.rpcUrl);
+    const transport = createRpcTransport(
+      opts.rpcUrl ??
+        (opts.network === "paseo"
+          ? PASEO_BROWSER_RPC_URLS
+          : "http://127.0.0.1:8545")
+    );
 
     this.publicClient = createPublicClient({
       chain,

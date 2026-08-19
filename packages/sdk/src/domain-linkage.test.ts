@@ -47,8 +47,8 @@ test("wellKnownDidConfigurationUrls includes origin root and GitHub Pages subpat
     pathname: "/peranto-protocol/",
   });
   assert.deepEqual(urls, [
-    "https://cryptohumano.github.io/.well-known/did-configuration.json",
     "https://cryptohumano.github.io/peranto-protocol/.well-known/did-configuration.json",
+    "https://cryptohumano.github.io/.well-known/did-configuration.json",
   ]);
 });
 

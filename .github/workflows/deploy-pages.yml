@@ -32,7 +32,6 @@ jobs:
           VITE_BASE: /peranto-protocol/
           PORTAL_ORIGIN: https://cryptohumano.github.io
           PORTAL_DID_PRIVATE_KEY: ${{ secrets.PORTAL_DID_PRIVATE_KEY }}
-          VITE_PERANTO_RPC_URL: https://services.polkadothub-rpc.com/testnet/
         run: npm run build -w @peranto/web
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3

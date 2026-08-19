@@ -15,6 +15,7 @@ import type { Address, Hex } from "viem";
 import {
   DEFAULT_NETWORK,
   DEFAULT_RPC,
+  PASEO_RPC_URLS,
   deploymentToAddresses,
   loadPaseoDeployment,
 } from "./deployment";
@@ -40,7 +41,7 @@ export async function getAddresses(): Promise<ContractAddresses> {
 
 export async function getReadClient(network: PerantoNetwork = DEFAULT_NETWORK) {
   const addresses = await getAddresses();
-  return new PerantoClient({ network, addresses, rpcUrl: DEFAULT_RPC });
+  return new PerantoClient({ network, addresses, rpcUrl: PASEO_RPC_URLS });
 }
 
 /** Local HD path — requires private key in session. */
@@ -53,7 +54,7 @@ export async function getWriteClient(session?: SessionIdentity | null) {
   return new PerantoClient({
     network: DEFAULT_NETWORK,
     addresses,
-    rpcUrl: DEFAULT_RPC,
+    rpcUrl: PASEO_RPC_URLS,
     privateKey: s.privateKey,
     mnemonic: s.mnemonic,
   });
@@ -484,12 +485,12 @@ export async function portalResolveDid(
           fromBlock: BigInt(prev.syncedToBlock) + 1n,
           seedServices: syncStateToServices(did, prev),
           chunkSize: 4_000n,
-          concurrency: 8,
+          concurrency: 3,
         }
       : {
           lookback: opts?.lookback ?? 2_000_000n,
           chunkSize: 4_000n,
-          concurrency: 8,
+          concurrency: 3,
         };
 
     const [deactivated, collected, delegates] = await Promise.all([
@@ -731,9 +732,10 @@ export async function portalSendNative(
 ): Promise<Hex> {
   const s = session ?? loadSession();
   if (!s) throw new Error("Sin sesión");
-  const { parseEther, createWalletClient, createPublicClient, http, parseGwei } =
+  const { parseEther, createWalletClient, createPublicClient, parseGwei } =
     await import("viem");
   const { privateKeyToAccount } = await import("viem/accounts");
+  const { createRpcTransport } = await import("@peranto/sdk");
   const value = parseEther(valueEther);
   if (value <= 0n) throw new Error("Monto debe ser > 0");
 
@@ -767,16 +769,17 @@ export async function portalSendNative(
     id: 420420417,
     name: "Polkadot Hub TestNet",
     nativeCurrency: { name: "PAS", symbol: "PAS", decimals: 18 },
-    rpcUrls: { default: { http: [DEFAULT_RPC] } },
+    rpcUrls: { default: { http: [...PASEO_RPC_URLS] } },
   } as const;
+  const transport = createRpcTransport(PASEO_RPC_URLS);
   const wallet = createWalletClient({
     account,
     chain,
-    transport: http(DEFAULT_RPC),
+    transport,
   });
   const publicClient = createPublicClient({
     chain,
-    transport: http(DEFAULT_RPC),
+    transport,
   });
   const hash = await wallet.sendTransaction({
     to,

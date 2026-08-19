@@ -395,7 +395,6 @@ export function wellKnownDidConfigurationUrls(
     if (!urls.includes(url)) urls.push(url);
   };
 
-  add("");
   const basePath = opts?.basePath?.trim();
   if (basePath) add(basePath.startsWith("/") ? basePath : `/${basePath}`);
 
@@ -403,6 +402,9 @@ export function wellKnownDidConfigurationUrls(
     const seg = opts.pathname.split("/").filter(Boolean)[0];
     if (seg && !seg.includes(".")) add(`/${seg}`);
   }
+
+  // Origin root last: GitHub project Pages 404s here; still valid for custom domains.
+  add("");
 
   return urls;
 }

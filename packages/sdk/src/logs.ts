@@ -12,7 +12,7 @@ import {
 const DEFAULT_LOOKBACK = 80_000n;
 const DEFAULT_CHUNK = 2_000n;
 /** Parallel eth_getLogs — keep modest to avoid public-RPC 429s. */
-const DEFAULT_CONCURRENCY = 8;
+const DEFAULT_CONCURRENCY = 3;
 
 type Client = {
   getBlockNumber: () => Promise<bigint>;

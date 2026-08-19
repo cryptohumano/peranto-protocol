@@ -1,5 +1,9 @@
 import type { Address } from "viem";
-import type { ContractAddresses, PerantoNetwork } from "@peranto/sdk";
+import {
+  PASEO_BROWSER_RPC_URLS,
+  type ContractAddresses,
+  type PerantoNetwork,
+} from "@peranto/sdk";
 
 export type DeploymentJson = {
   network: string;
@@ -40,12 +44,13 @@ export function deploymentToAddresses(d: DeploymentJson): ContractAddresses {
 
 export const DEFAULT_NETWORK: PerantoNetwork = "paseo";
 
-/** Public Paseo RPCs — primary first; viem/http retries on transport errors. */
+/**
+ * Browser RPCs: Parity first (CORS on success and errors).
+ * Optional `VITE_PERANTO_RPC_URL` is tried first, then public fallbacks.
+ */
 export const PASEO_RPC_URLS = [
   import.meta.env.VITE_PERANTO_RPC_URL as string | undefined,
-  "https://services.polkadothub-rpc.com/testnet/",
-  "https://eth-rpc-testnet.polkadot.io/",
+  ...PASEO_BROWSER_RPC_URLS,
 ].filter((u): u is string => Boolean(u?.trim()));
 
-export const DEFAULT_RPC =
-  PASEO_RPC_URLS[0] ?? "https://services.polkadothub-rpc.com/testnet/";
+export const DEFAULT_RPC = PASEO_RPC_URLS[0] ?? PASEO_BROWSER_RPC_URLS[0];

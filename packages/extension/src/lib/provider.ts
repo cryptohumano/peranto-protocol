@@ -1,6 +1,11 @@
-import { NETWORK_CHAIN_ID, type PerantoNetwork } from "@peranto/sdk";
+import {
+  NETWORK_CHAIN_ID,
+  PASEO_BROWSER_RPC_URLS,
+  createRpcTransport,
+  type PerantoNetwork,
+} from "@peranto/sdk";
 import { privateKeyToAccount } from "viem/accounts";
-import { createWalletClient, createPublicClient, http, type Hex } from "viem";
+import { createWalletClient, createPublicClient, type Hex } from "viem";
 import * as storage from "./storage";
 import { runAction } from "./actions";
 import {
@@ -22,12 +27,19 @@ const paseoChain = {
   rpcUrls: {
     default: {
       http: [
-        "https://services.polkadothub-rpc.com/testnet/",
         "https://eth-rpc-testnet.polkadot.io/",
+        "https://services.polkadothub-rpc.com/testnet/",
       ],
     },
   },
 } as const;
+
+function rpcTransport(network: PerantoNetwork, rpcUrl: string) {
+  if (network === "paseo") {
+    return createRpcTransport([rpcUrl, ...PASEO_BROWSER_RPC_URLS]);
+  }
+  return createRpcTransport(rpcUrl);
+}
 
 function chainFor(network: PerantoNetwork) {
   switch (network) {
@@ -91,7 +103,7 @@ export async function handleProviderRequest(
     case "eth_getBalance": {
       const pub = createPublicClient({
         chain: chainFor(state.settings.network),
-        transport: http(state.settings.rpcUrl),
+        transport: rpcTransport(state.settings.network, state.settings.rpcUrl),
       });
       const addr = (params[0] as string) ?? identity?.address;
       if (!addr) throw new Error("No address");
@@ -105,7 +117,7 @@ export async function handleProviderRequest(
       const wallet = createWalletClient({
         account,
         chain: chainFor(state.settings.network),
-        transport: http(state.settings.rpcUrl),
+        transport: rpcTransport(state.settings.network, state.settings.rpcUrl),
       });
       return wallet.signMessage({
         message: message.startsWith("0x")
@@ -125,7 +137,7 @@ export async function handleProviderRequest(
       const wallet = createWalletClient({
         account,
         chain: chainFor(state.settings.network),
-        transport: http(state.settings.rpcUrl),
+        transport: rpcTransport(state.settings.network, state.settings.rpcUrl),
       });
       return wallet.sendTransaction({
         to: tx.to,
