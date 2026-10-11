@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Peranto · CiGo y Tickets</title>
+  <meta name="description" content="Peranto es la suite. CiGo da la credencial, el acceso y la votación de tu organización. Tickets vende boletos que no se clonan." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,560;9..144,640&family=IBM+Plex+Mono:wght@400;500&family=Outfit:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect fill='%230c1218' width='32' height='32' rx='8'/%3E%3Ccircle cx='16' cy='16' r='6' fill='%233da1bc'/%3E%3C/svg%3E" />
+</head>
+<body>
+  <header class="hub">
+    <nav class="site-nav">
+      <a class="brand" href="index.html">Peranto <small>suite</small></a>
+      <button class="menu-btn" type="button" aria-expanded="false" aria-controls="menu">Menú</button>
+      <div class="nav-links" id="menu">
+        <a href="cigo.html">CiGo</a>
+        <a href="tickets.html">Tickets</a>
+        <a href="cigo.html#piloto">Piloto de 50</a>
+      </div>
+    </nav>
+    <div class="wrap choice">
+      <div>
+        <p class="eyebrow" style="color: var(--bright)">Elige el producto</p>
+        <h1>Qué quieres que haga el teléfono de tu gente.</h1>
+        <p class="lede">Peranto es la suite. Se contratan dos cosas: la credencial de tu organización, o el boleto de tu evento.</p>
+      </div>
+      <div class="products">
+        <a class="product" href="cigo.html">
+          <div>
+            <span>Organizaciones</span>
+            <strong>CiGo</strong>
+            <p>Credencial en el celular, acceso con un toque y votación solo para quien pertenece. Universidades, condominios, sindicatos y cooperativas.</p>
+          </div>
+          <em>Ver CiGo</em>
+        </a>
+        <a class="product" href="tickets.html">
+          <div>
+            <span>Eventos</span>
+            <strong>Tickets</strong>
+            <p>El asistente compra, guarda el boleto y pasa el torniquete. El mismo código no entra dos veces y la cesión se queda al precio de cara.</p>
+          </div>
+          <em>Ver Tickets</em>
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section class="band">
+      <div class="wrap">
+        <p class="eyebrow">CiGo</p>
+        <h2>Para quien ya tiene una comunidad que cuidar.</h2>
+        <div class="grid-4" style="margin-top: 22px;">
+          <article class="card"><strong>Universidad</strong><p>Credencial de estudiante o personal, acceso al campus y votación de consejo.</p></article>
+          <article class="card"><strong>Condominio</strong><p>El lector reconoce al residente o al pase del día. Un pase vencido no abre.</p></article>
+          <article class="card"><strong>Sindicato</strong><p>Padrón de agremiados y asamblea. Cada quien ve solo la votación que le toca.</p></article>
+          <article class="card"><strong>Cooperativa</strong><p>Membresía de socios, puerta y decisiones de la asamblea en el mismo teléfono.</p></article>
+        </div>
+        <div class="actions">
+          <a class="btn solid" href="cigo.html">Abrir la landing de CiGo</a>
+          <a class="btn line" href="cigo.html#piloto">Calcular el ahorro frente al plástico</a>
+        </div>
+      </div>
+    </section>
+    <section class="band quiet">
+      <div class="wrap">
+        <p class="eyebrow">Tickets</p>
+        <h2>Para quien vende entradas y quiere que entren las personas correctas.</h2>
+        <div class="grid-3" style="margin-top: 22px;">
+          <article class="card"><strong>Festival</strong><p>Aforo real. El boleto se consume una vez en la puerta.</p></article>
+          <article class="card"><strong>Conferencia</strong><p>El asistente lleva el pase en el teléfono, sin PDF reenviable.</p></article>
+          <article class="card"><strong>Recinto</strong><p>Publicas función, precio y cupo. La cesión no sube del precio de cara.</p></article>
+        </div>
+        <div class="actions">
+          <a class="btn solid" href="tickets.html">Abrir la landing de Tickets</a>
+        </div>
+      </div>
+    </section>
+  </main>
+  <footer>
+    <div class="wrap">Peranto · <a href="https://peranto.app">peranto.app</a> · <a href="https://cigo.peranto.app">cigo.peranto.app</a> · <a href="mailto:outreach@peranto.app">outreach@peranto.app</a></div>
+  </footer>
+  <script src="site.js"></script>
+</body>
+</html>

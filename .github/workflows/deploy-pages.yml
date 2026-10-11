@@ -33,6 +33,8 @@ jobs:
           PORTAL_ORIGIN: https://cryptohumano.github.io
           PORTAL_DID_PRIVATE_KEY: ${{ secrets.PORTAL_DID_PRIVATE_KEY }}
         run: npm run build -w @peranto/web
+      - name: Add commercial site
+        run: mkdir -p packages/web/dist/comercial && cp -a sites/comercial/. packages/web/dist/comercial/
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
