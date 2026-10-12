@@ -154,23 +154,13 @@ h3 { margin: 0 0 8px; font-size: 22px; line-height: 1.15; }
   padding: 14px;
   min-height: 340px;
 }
-.device {
-  width: min(260px, 100%);
+.reel {
+  display: block;
+  width: min(280px, 100%);
   margin: 14px auto 0;
+  border-radius: 28px;
   background: #05080f;
   border: 1px solid #334155;
-  border-radius: 32px;
-  padding: 12px 10px 16px;
-  box-shadow: inset 0 0 0 2px #0b1220;
-}
-.device::before {
-  content: "";
-  display: block;
-  width: 78px;
-  height: 8px;
-  margin: 2px auto 12px;
-  border-radius: 99px;
-  background: #1e293b;
 }
 .tag { margin: 0; font-family: var(--mono); font-size: 10px; letter-spacing: 0.12em; color: var(--sky); }
 .pass {
