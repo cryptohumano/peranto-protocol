@@ -15,14 +15,16 @@
 <body>
   <header class="nav">
     <div class="nav-inner">
-      <a class="brand" href="index.html">PERANTO <small>CiGo SOVEREIGN ID</small></a>
-      <span class="wsis">WSIS Forum Hackathon · UIT / ONU</span>
+      <a class="brand" href="index.html" aria-label="Peranto">
+        <img class="brand-logo" src="logo-peranto.png" alt="Peranto" width="140" height="58" />
+      </a>
+      <a class="wsis" href="https://www.itu.int/net4/wsis/forum/2023/Files/ocp/WF23OCPP5PRES-en.pdf" target="_blank" rel="noopener noreferrer">WSIS Forum Hackathon · UIT / ONU</a>
       <button class="menu-btn" type="button" aria-expanded="false" aria-controls="menu">Menú</button>
       <nav class="links" id="menu">
         <a href="#cigo">CiGo</a>
         <a href="tickets.html">Tickets (en desarrollo)</a>
         <a href="#plastico">Frente al plástico</a>
-        <a href="#simulador">Simulador en vivo</a>
+        <a href="#simulador">La demostración</a>
         <a href="#postular">Videollamada de 10 min</a>
         <a class="btn solid tiny" href="#postular">Piloto pionero (50 pases)</a>
       </nav>
@@ -33,7 +35,7 @@
     <section class="hero" id="cigo">
       <div class="wrap">
         <div class="hero-copy">
-          <a class="authority" href="#pioneros">Reconocimiento internacional: hackathon WSIS Forum (UIT / Naciones Unidas)</a>
+          <a class="authority" href="https://www.itu.int/net4/wsis/forum/2023/Files/ocp/WF23OCPP5PRES-en.pdf" target="_blank" rel="noopener noreferrer">Reconocimiento internacional: hackathon WSIS Forum (UIT / Naciones Unidas)</a>
           <h1>La credencial infalsificable en el celular de tu comunidad.</h1>
           <p class="lead" style="margin-top:16px">Sustituye carnets de plástico y gafetes perdidos por una credencial que la persona lleva en su teléfono. El ciclo de validación en el puesto es de unos 10 segundos: lectura NFC o QR y comprobación de la firma en la laptop, con un lector USB de escritorio.</p>
           <div class="actions">
@@ -159,21 +161,6 @@
         <h2>Huella de plástico y gasto de PVC que puedes dejar de repetir.</h2>
         <p class="lead">Mueve los parámetros. El resultado es una estimación para decidir el piloto, no una cotización de imprenta.</p>
         <div class="calc" data-calc>
-          <form class="card">
-            <label class="field">Personas en la organización
-              <output data-members>500</output>
-              <input type="range" name="members" min="50" max="3000" step="10" value="500" />
-            </label>
-            <label class="field">Costo estimado por carnet, cordón y porta (MXN)
-              <output data-cost>$48</output>
-              <input type="range" name="cost" min="20" max="150" step="1" value="48" />
-            </label>
-            <label class="field">Reposición anual por extravío o deterioro
-              <output data-rate>15%</output>
-              <input type="range" name="rate" min="5" max="40" step="1" value="15" />
-            </label>
-            <p class="note">Fórmula visible: una emisión más dos años de reposición, a 5 g de PVC por tarjeta. Con 500 personas, $48 y 15 %, el gasto sale en $31,200 MXN y el plástico en ~3.25 kg.</p>
-          </form>
           <div class="figures">
             <article class="figure">
               <span class="muted">Gasto evitable en PVC a 3 años</span>
@@ -189,9 +176,24 @@
               <span class="muted">Piloto pionero</span>
               <b>50 credenciales</b>
               <span class="muted">El plan de la escala completa se define con la organización.</span>
-              <a class="btn solid" href="#postular" style="margin-top:12px">Postular a 50 credenciales piloto</a>
+              <a class="btn solid" href="#postular">Postular a 50 credenciales piloto</a>
             </article>
           </div>
+          <form class="card">
+            <label class="field">Personas en la organización
+              <output data-members>500</output>
+              <input type="range" name="members" min="50" max="3000" step="10" value="500" />
+            </label>
+            <label class="field">Costo estimado por carnet, cordón y porta (MXN)
+              <output data-cost>$48</output>
+              <input type="range" name="cost" min="20" max="150" step="1" value="48" />
+            </label>
+            <label class="field">Reposición anual por extravío o deterioro
+              <output data-rate>15%</output>
+              <input type="range" name="rate" min="5" max="40" step="1" value="15" />
+            </label>
+            <p class="note" data-formula></p>
+          </form>
         </div>
       </div>
     </section>

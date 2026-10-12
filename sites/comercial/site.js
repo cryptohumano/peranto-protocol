@@ -90,8 +90,16 @@
       out.members.textContent = n.toLocaleString("es-MX");
       out.cost.textContent = money.format(c);
       out.rate.textContent = rate.value + "%";
-      out.spend.textContent = money.format(Math.round(cards * c));
-      out.kg.textContent = "~" + (cards * 0.005).toLocaleString("es-MX", { maximumFractionDigits: 2 }) + " kg";
+      const spend = Math.round(cards * c);
+      const kg = (cards * 0.005).toLocaleString("es-MX", { maximumFractionDigits: 2 });
+      out.spend.textContent = money.format(spend);
+      out.kg.textContent = "~" + kg + " kg";
+      const formula = calc.querySelector("[data-formula]");
+      if (formula) {
+        formula.textContent = "Una emisión más dos años de reposición, a 5 g por tarjeta. Con "
+          + n.toLocaleString("es-MX") + " personas, " + money.format(c) + " y " + rate.value
+          + " %, el gasto sale en " + money.format(spend) + " y el plástico en ~" + kg + " kg.";
+      }
     };
     [members, cost, rate].forEach((input) => input.addEventListener("input", paint));
     paint();
