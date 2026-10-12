@@ -1,9 +1,7 @@
 (function () {
-  const money = new Intl.NumberFormat("es-MX", {
-    style: "currency",
-    currency: "MXN",
-    maximumFractionDigits: 0,
-  });
+  const WA_NUMBER = "";
+  const WA_TEXT = "Hola Edgar, quiero conocer la demo de CiGo";
+  const money = new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 });
 
   const menuBtn = document.querySelector(".menu-btn");
   const menu = document.querySelector("#menu");
@@ -20,147 +18,118 @@
     });
   }
 
-  document.querySelectorAll("[data-gate]").forEach((root) => {
-    const phone = root.querySelector("[data-phone]");
-    const result = root.querySelector("[data-result]");
-    const status = root.querySelector("[data-status]");
-    const log = root.querySelector("[data-log]");
-    let gen = 0;
-    const play = () => {
-      const id = ++gen;
-      phone.classList.remove("is-in");
-      result.hidden = true;
-      if (log) log.hidden = true;
-      status.textContent = "Lector listo";
-      window.setTimeout(() => {
-        if (id !== gen) return;
-        phone.classList.add("is-in");
-        status.textContent = "Leyendo pase…";
-      }, 280);
-      window.setTimeout(() => {
-        if (id !== gen) return;
-        result.hidden = false;
-        if (log) log.hidden = false;
-        status.textContent = "Listo";
-      }, 980);
-    };
-    root.querySelector("[data-replay]").addEventListener("click", play);
-    if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) play();
+  document.querySelectorAll("[data-wa]").forEach((node) => {
+    if (WA_NUMBER) {
+      node.href = "https://wa.me/" + WA_NUMBER + "?text=" + encodeURIComponent(WA_TEXT);
+      return;
+    }
+    node.addEventListener("click", (event) => {
+      event.preventDefault();
+      const phone = document.querySelector('[name="phone"]');
+      document.querySelector("#postular")?.scrollIntoView({ behavior: "smooth" });
+      if (phone) window.setTimeout(() => phone.focus(), 350);
+    });
   });
 
-  const roi = document.querySelector("[data-roi]");
-  if (roi) {
-    const form = roi.querySelector("[data-plan]");
-    const range = form.querySelector('[name="members"]');
-    const count = form.querySelector("[data-count]");
-    const plastic = roi.querySelector("[data-plastic]");
-    const pilot = roi.querySelector("[data-pilot]");
-    const rest = roi.querySelector("[data-rest]");
-    const CARD = 48;
-    const REPLACEMENT = 0.15;
-    const YEARS = 3;
-
-    const paint = () => {
-      const members = Number(range.value);
-      count.textContent = members.toLocaleString("es-MX");
-      const total = Math.round(members * CARD * (1 + REPLACEMENT * YEARS));
-      plastic.textContent = money.format(total);
-      const included = Math.min(members, 50);
-      pilot.textContent = included + " incluidas";
-      const extra = Math.max(0, members - 50);
-      rest.textContent = extra === 0
-        ? "Toda la organización cabe en el piloto."
-        : extra.toLocaleString("es-MX") + " credenciales más entran al plan de la organización.";
+  const sim = document.querySelector("[data-sim]");
+  if (sim) {
+    const status = sim.querySelector("[data-status]");
+    const log = sim.querySelector("[data-log]");
+    const bar = sim.querySelector("[data-bar]");
+    const state = sim.querySelector("[data-sign]");
+    const button = sim.querySelector("[data-run]");
+    let timers = [];
+    const stamp = () => new Date().toTimeString().slice(0, 8);
+    const clear = () => { timers.forEach((id) => window.clearTimeout(id)); timers = []; };
+    const run = () => {
+      clear();
+      log.replaceChildren();
+      bar.style.width = "0%";
+      state.textContent = "Reto dinámico · en curso";
+      status.textContent = "Esperando presentación de wallet";
+      const push = (line) => {
+        const item = document.createElement("li");
+        item.textContent = "[" + stamp() + "] " + line;
+        log.appendChild(item);
+      };
+      push("Servicio de escritorio listo. Lector NFC conectado. READY");
+      const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      const marks = reduced
+        ? [{ at: 0, pct: 100, status: "Verificación lista", sign: "Firma secp256k1 · autenticidad verificada", line: "Challenge firmado localmente. Verificación en la laptop OK. VALID" }]
+        : [
+            { at: 2000, pct: 20, status: "Acercando el teléfono al lector", sign: "Leyendo NFC / QR", line: "" },
+            { at: 5000, pct: 55, status: "Firma del reto en el teléfono", sign: "Firma secp256k1 · recibida", line: "Challenge firmado localmente." },
+            { at: 8000, pct: 80, status: "Cálculo en la laptop del puesto", sign: "Verificando en el escritorio", line: "" },
+            { at: 10000, pct: 100, status: "Confirmado en pantalla", sign: "Firma secp256k1 · autenticidad verificada", line: "Verificación en la laptop OK. VALID" },
+          ];
+      marks.forEach((mark) => {
+        timers.push(window.setTimeout(() => {
+          bar.style.width = mark.pct + "%";
+          status.textContent = mark.status;
+          state.textContent = mark.sign;
+          if (mark.line) push(mark.line);
+        }, mark.at));
+      });
     };
-    range.addEventListener("input", paint);
-    paint();
+    button.addEventListener("click", run);
+  }
 
+  const calc = document.querySelector("[data-calc]");
+  if (calc) {
+    const members = calc.querySelector('[name="members"]');
+    const cost = calc.querySelector('[name="cost"]');
+    const rate = calc.querySelector('[name="rate"]');
+    const out = {
+      members: calc.querySelector("[data-members]"),
+      cost: calc.querySelector("[data-cost]"),
+      rate: calc.querySelector("[data-rate]"),
+      spend: calc.querySelector("[data-spend]"),
+      kg: calc.querySelector("[data-kg]"),
+    };
+    const paint = () => {
+      const n = Number(members.value);
+      const c = Number(cost.value);
+      const r = Number(rate.value) / 100;
+      const cards = n * (1 + r * 2);
+      out.members.textContent = n.toLocaleString("es-MX");
+      out.cost.textContent = money.format(c);
+      out.rate.textContent = rate.value + "%";
+      out.spend.textContent = money.format(Math.round(cards * c));
+      out.kg.textContent = "~" + (cards * 0.005).toLocaleString("es-MX", { maximumFractionDigits: 2 }) + " kg";
+    };
+    [members, cost, rate].forEach((input) => input.addEventListener("input", paint));
+    paint();
+  }
+
+  const form = document.querySelector("[data-form]");
+  if (form) {
     const ready = form.querySelector("[data-ready]");
     const summary = form.querySelector("[data-summary]");
     form.addEventListener("submit", (event) => {
       event.preventDefault();
       const data = new FormData(form);
-      const members = Number(data.get("members"));
-      const extra = Math.max(0, members - 50);
-      const total = Math.round(members * CARD * (1 + REPLACEMENT * YEARS));
       const text = [
-        "Plan CiGo",
-        "Organización: " + String(data.get("org")).trim(),
-        "Tipo: " + String(data.get("kind")),
+        "Postulación · Piloto pionero CiGo",
+        "Responsable: " + String(data.get("name")).trim(),
+        "Organización: " + String(data.get("kind")),
+        "Miembros: " + String(data.get("size")).trim(),
         "Correo: " + String(data.get("email")).trim(),
-        "Personas: " + members,
-        "Piloto: " + Math.min(members, 50) + " credenciales",
-        "Por cotizar: " + extra,
-        "Plástico estimado a 3 años: " + money.format(total),
-        "Supuesto: $48 MXN por carnet y 15% de reposición anual.",
-        "Este plan queda en esta página. Cópialo y envíalo a outreach@peranto.app si quieres que lo revisemos.",
+        "WhatsApp: " + String(data.get("phone")).trim(),
+        "Piloto: 50 credenciales",
+        "La postulación queda en esta página. No se envía a un servidor.",
       ].join("\n");
       summary.textContent = text;
       ready.hidden = false;
       ready.dataset.text = text;
     });
     form.querySelector("[data-copy]").addEventListener("click", async () => {
-      const text = ready.dataset.text || summary.textContent;
+      const button = form.querySelector("[data-copy]");
       try {
-        await navigator.clipboard.writeText(text);
-        form.querySelector("[data-copy]").textContent = "Copiado";
+        await navigator.clipboard.writeText(ready.dataset.text || summary.textContent);
+        button.textContent = "Copiado";
       } catch {
-        form.querySelector("[data-copy]").textContent = "Selecciona el texto y cópialo";
+        button.textContent = "Selecciona el texto y cópialo";
       }
     });
   }
-
-  const scalp = document.querySelector("[data-scalp]");
-  if (scalp) {
-    const fields = scalp.querySelectorAll("input");
-    const leak = scalp.querySelector("[data-leak]");
-    const detail = scalp.querySelector("[data-detail]");
-    const paint = () => {
-      const cap = Number(scalp.querySelector('[name="cap"]').value) || 0;
-      const face = Number(scalp.querySelector('[name="face"]').value) || 0;
-      const rate = Number(scalp.querySelector('[name="rate"]').value) || 0;
-      const mult = Number(scalp.querySelector('[name="mult"]').value) || 1;
-      const resold = cap * (rate / 100);
-      const extra = Math.max(0, resold * face * (mult - 1));
-      leak.textContent = money.format(extra);
-      detail.textContent = Math.round(resold).toLocaleString("es-MX")
-        + " boletos revendidos, a "
-        + mult.toLocaleString("es-MX")
-        + " veces el precio de cara.";
-    };
-    fields.forEach((field) => field.addEventListener("input", paint));
-    paint();
-  }
-
-  document.querySelectorAll("[data-clone]").forEach((root) => {
-    const phone = root.querySelector("[data-phone]");
-    const ok = root.querySelector("[data-ok]");
-    const no = root.querySelector("[data-no]");
-    const status = root.querySelector("[data-status]");
-    const state = root.querySelector("[data-ticket-state]");
-    let used = false;
-    const approach = () => {
-      phone.classList.remove("is-in");
-      window.setTimeout(() => phone.classList.add("is-in"), 40);
-    };
-    root.querySelector("[data-scan]").addEventListener("click", () => {
-      approach();
-      used = true;
-      ok.hidden = false;
-      no.hidden = true;
-      status.textContent = "Entrada registrada";
-      state.textContent = "Consumido";
-    });
-    root.querySelector("[data-again]").addEventListener("click", () => {
-      if (!used) {
-        status.textContent = "Primero valida el boleto";
-        return;
-      }
-      approach();
-      ok.hidden = true;
-      no.hidden = false;
-      status.textContent = "Rechazado";
-      state.textContent = "Rechazado";
-    });
-  });
 })();
