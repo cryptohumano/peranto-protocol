@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Tickets · En desarrollo</title>
-  <meta name="description" content="Tickets de CiGo sigue en desarrollo. El boleto se consume una vez y la cesión queda al precio de cara." />
+  <title>Tickets · La captura no entra</title>
+  <meta name="description" content="El boleto de CiGo no es un PDF. En la puerta, la cámara de la laptop lee una presentación firmada. La misma captura, la segunda vez, ya no pasa." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600&display=swap" rel="stylesheet" />
@@ -17,39 +17,160 @@
       <button class="menu-btn" type="button" aria-expanded="false" aria-controls="menu">Menú</button>
       <nav class="links" id="menu">
         <a href="index.html#cigo">CiGo</a>
-        <a href="tickets.html">Tickets (en desarrollo)</a>
-        <a href="index.html#plastico">Frente al plástico</a>
-        <a href="index.html#simulador">Simulador en vivo</a>
-        <a class="btn solid tiny" href="index.html#postular">Piloto pionero (50 pases)</a>
+        <a href="#puerta">Puesto de acceso</a>
+        <a href="#corte">Corte de taquilla</a>
+        <a href="index.html#postular">Piloto pionero</a>
       </nav>
     </div>
   </header>
+
   <main>
     <section class="hero">
-      <div class="wrap">
-        <p class="kicker">Tickets · en evolución</p>
-        <h1>El boleto se consume una vez.</h1>
-        <p class="lead" style="margin-top:14px">La taquilla ya publica función, precio y aforo. Cada identidad compra hasta cuatro boletos, puede ceder el suyo una sola vez al precio de cara, o devolverlo. La puerta lo consume una vez. La experiencia de torniquete sigue en desarrollo.</p>
-        <div class="actions">
-          <a class="btn solid" href="index.html#postular">Volver al piloto de credenciales</a>
+      <div class="wrap hero-grid">
+        <div>
+          <p class="kicker">Taquilla · foro, teatro, conferencia</p>
+          <h1>La captura de WhatsApp no entra.</h1>
+          <p class="lead" style="margin-top:16px">El boleto no es un PDF ni un link para el grupo. Quien compra lo lleva en su wallet y en la puerta enseña una presentación firmada, con caducidad. La laptop del equipo apunta la cámara. La primera lectura marca la entrada. La foto que le mandó a cuatro amigos llega tarde.</p>
+          <div class="actions">
+            <a class="btn solid" href="#puerta">Probar la misma captura</a>
+            <a class="btn ghost" href="#corte">Ver el cargo de la boletera</a>
+          </div>
+          <p class="trust">Puesto real: laptop o teléfono del staff, pantalla Puerta, cámara. Sin molinete.</p>
+        </div>
+        <div class="sim" id="puerta" data-door>
+          <div class="door-grid">
+            <article class="phone">
+              <p class="tag">Wallet · boleto 0419</p>
+              <div class="boleto">
+                <span class="muted">Foro Norte · General</span>
+                <strong>Luis Herrera</strong>
+                <div class="row"><span>Función</span><b>Sábado 20:00</b></div>
+                <div class="row"><span>Precio de cara</span><b>$450</b></div>
+                <div class="row"><span>Estado</span><b data-pass>Sin usar</b></div>
+                <p class="code">cigo:boleto:419.1760220000.a4c1…e90 firma de demostración</p>
+              </div>
+              <p class="note">Esa cadena caduca. Una captura del grupo deja de servir en cuanto vence o en cuanto alguien ya pasó.</p>
+            </article>
+            <article class="desk">
+              <p class="tag">Pantalla Puerta</p>
+              <h3>Cámara del puesto</h3>
+              <p data-when>Apunta al código del teléfono, no a un PDF impreso.</p>
+              <div class="verdict" data-verdict>
+                <b>Esperando</b>
+                <span>La cuenta que creó la función, o alguien de su lista, es quien marca la entrada.</span>
+              </div>
+              <div class="actions">
+                <button class="btn solid" type="button" data-scan>Leer este boleto</button>
+                <button class="btn ghost" type="button" data-again>Intentar la misma captura</button>
+              </div>
+            </article>
+          </div>
+          <p class="note">Demostración en esta página. En el puesto, el mensaje de duplicado es: «El boleto ya pasó la puerta.» Marcar la entrada es una escritura de la taquilla: si el recinto se queda sin red, la cámara ve el código y el marcado no cierra.</p>
         </div>
       </div>
     </section>
+
+    <section class="band">
+      <div class="wrap">
+        <p class="kicker">Cómo se trabaja la fila</p>
+        <h2>Tres cosas que ya hace el protocolo.</h2>
+        <div class="steps">
+          <article class="card step">
+            <i>01 · Cartel</i>
+            <h3>Publicas precio y aforo</h3>
+            <p>Título, precio de cara y cupo. En cuanto hay boletos vendidos, ese precio queda fijo: así una devolución sigue siendo el mismo monto.</p>
+          </article>
+          <article class="card step">
+            <i>02 · Compra</i>
+            <h3>Hasta cuatro por persona</h3>
+            <p>Cada compra paga el precio de cara, ni un peso de más dentro del contrato. Se puede ceder una sola vez, de regalo o hasta ese precio. La segunda cesión no existe.</p>
+          </article>
+          <article class="card step">
+            <i>03 · Puerta</i>
+            <h3>La firma tiene que ser de quien lo trae</h3>
+            <p>La cámara lee <span class="code" style="display:inline">cigo:boleto:…</span>. Si la firma no es del titular de ese momento, no entra. Si ya pasó, la pantalla lo dice y el boleto ya no se puede ceder ni devolver.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="corte">
+      <div class="wrap">
+        <p class="kicker">El corte</p>
+        <h2>Lo que la boletera se queda, y lo que esta taquilla no descuenta.</h2>
+        <p class="lead">En foros de 500 a 3,000 personas el golpe suele ser el cargo de 12 % a 18 % y el dinero que sale semanas después. Aquí el comprador paga el precio de cara. El contrato no se queda un porcentaje. El retiro lo hace quien creó la función, cuando cierra la ventana.</p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th></th><th>Boletera de siempre</th><th>Taquilla Peranto</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>En la fila</td>
+                <td>PDF o captura reenviada por WhatsApp.</td>
+                <td>Presentación firmada en el teléfono, con hora de caducidad.</td>
+              </tr>
+              <tr>
+                <td>La misma foto</td>
+                <td>Varias personas intentan el mismo archivo.</td>
+                <td>La segunda lectura dice que ese boleto ya pasó la puerta.</td>
+              </tr>
+              <tr>
+                <td>Cargo</td>
+                <td>12 % a 18 % encima del precio, cobrado al público.</td>
+                <td>El valor que entra es el precio de cara. No hay un porcentaje de protocolo en la compra ni en el retiro.</td>
+              </tr>
+              <tr>
+                <td>Cuándo cobras</td>
+                <td>El corte suele salir días o semanas después del show.</td>
+                <td>Lo retira quien creó la función, al cierre de la ventana que publicó.</td>
+              </tr>
+              <tr>
+                <td>Equipo</td>
+                <td>La app de la boletera, si su red responde.</td>
+                <td>Laptop o teléfono del equipo, con la cámara en la pantalla Puerta.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="calc" data-fee style="margin-top:22px">
+          <form class="card">
+            <label class="field">Aforo
+              <input type="number" name="cap" min="50" max="20000" value="800" />
+            </label>
+            <label class="field">Precio de cara (MXN)
+              <input type="number" name="face" min="50" max="20000" value="450" />
+            </label>
+            <label class="field">Cargo de boletera que hoy paga el público (%)
+              <input type="number" name="cut" min="0" max="30" value="15" />
+            </label>
+            <p class="note">800 × $450 × 15 % = $54,000. Es el dinero extra del cargo, no una comisión que esta taquilla cobre.</p>
+          </form>
+          <article class="figure">
+            <span class="muted">Cargo que el público paga de más</span>
+            <b data-leak>$54,000</b>
+            <span class="muted" data-detail></span>
+          </article>
+        </div>
+      </div>
+    </section>
+
     <section class="band">
       <div class="wrap cards">
         <article class="card">
-          <h3>Lo que ya hace el protocolo</h3>
-          <p>El precio de cara queda fijo cuando hay boletos vendidos. La segunda cesión no existe. Si el asistente no va, el boleto puede volver a la taquilla.</p>
+          <h3>Si no van</h3>
+          <p>Antes de pasar, el boleto puede volver a la taquilla. Quien pagó recupera su parte y el cupo regresa a la venta. Después de la puerta, ya no hay cesión ni devolución.</p>
         </article>
         <article class="card">
-          <h3>Lo que sigue</h3>
-          <p>La validación de entrada en el escritorio, para confirmar autenticidad y frenar el duplicado en la fila. Esta página no promete un torniquete automático.</p>
+          <h3>Quién marca la entrada</h3>
+          <p>La cuenta que creó la función, o una dirección de la lista que ella armó. Otra wallet no puede dar por entrado un boleto de ese show.</p>
+          <p class="meta"><a href="index.html#postular">Si además quieres credencial de comunidad, el piloto está en CiGo.</a></p>
         </article>
       </div>
     </section>
   </main>
   <footer>
-    <div class="wrap legal"><a href="index.html">CiGo</a> · Tickets en desarrollo · <a href="https://github.com/cryptohumano/peranto-protocol">GitHub</a></div>
+    <div class="wrap legal"><a href="index.html">CiGo</a> · Taquilla · <a href="https://github.com/cryptohumano/peranto-protocol">GitHub</a></div>
   </footer>
   <script src="site.js"></script>
 </body>

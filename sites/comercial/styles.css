@@ -267,8 +267,37 @@ footer ul { list-style: none; margin: 0; padding: 0; }
 footer li + li { margin-top: 8px; }
 .legal { margin-top: 22px; padding-top: 14px; border-top: 1px solid var(--line); font-size: 12px; }
 
+.door-grid { display: grid; grid-template-columns: 0.9fr 1.1fr; gap: 12px; }
+.boleto {
+  background: linear-gradient(165deg, #1a2740, #0b1220);
+  border: 1px dashed var(--line-2);
+  border-radius: 16px;
+  padding: 14px;
+}
+.boleto strong { display: block; font-family: var(--display); font-size: 26px; font-weight: 560; }
+.boleto .row { display: flex; justify-content: space-between; gap: 8px; margin-top: 8px; font-size: 13px; color: var(--soft); }
+.code {
+  margin-top: 12px;
+  padding: 8px;
+  border-radius: 8px;
+  background: #070b14;
+  color: var(--sky);
+  font-family: var(--mono);
+  font-size: 11px;
+  word-break: break-all;
+}
+.verdict {
+  margin-top: 12px;
+  border-radius: 12px;
+  padding: 12px;
+  min-height: 72px;
+}
+.verdict.ok { background: rgba(74, 222, 128, 0.12); color: var(--ok); }
+.verdict.bad { background: rgba(248, 113, 113, 0.12); color: #fca5a5; }
+.verdict b { display: block; font-family: var(--display); font-size: 22px; font-weight: 560; }
+
 @media (max-width: 900px) {
-  .hero-grid, .split, .two, .calc, .close, .cards, .steps, .segments, .sim-grid, .foot { grid-template-columns: 1fr; }
+  .hero-grid, .split, .two, .calc, .close, .cards, .steps, .segments, .sim-grid, .door-grid, .foot { grid-template-columns: 1fr; }
   .wsis { display: none; }
   .menu-btn { display: inline-flex; }
   .links {

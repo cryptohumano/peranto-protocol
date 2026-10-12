@@ -132,4 +132,53 @@
       }
     });
   }
+
+  const fee = document.querySelector("[data-fee]");
+  if (fee) {
+    const cap = fee.querySelector('[name="cap"]');
+    const face = fee.querySelector('[name="face"]');
+    const cut = fee.querySelector('[name="cut"]');
+    const leak = fee.querySelector("[data-leak]");
+    const detail = fee.querySelector("[data-detail]");
+    const paint = () => {
+      const n = Number(cap.value) || 0;
+      const price = Number(face.value) || 0;
+      const pct = Number(cut.value) || 0;
+      const extra = Math.round(n * price * (pct / 100));
+      leak.textContent = money.format(extra);
+      detail.textContent = n.toLocaleString("es-MX") + " boletos a " + money.format(price) + " con " + pct + "% de cargo.";
+    };
+    [cap, face, cut].forEach((input) => input.addEventListener("input", paint));
+    paint();
+  }
+
+  const door = document.querySelector("[data-door]");
+  if (door) {
+    const verdict = door.querySelector("[data-verdict]");
+    const when = door.querySelector("[data-when]");
+    let admittedAt = 0;
+    const elapsed = () => {
+      const sec = Math.max(0, Math.round((Date.now() - admittedAt) / 1000));
+      const m = Math.floor(sec / 60);
+      const s = sec % 60;
+      return m + "m " + String(s).padStart(2, "0") + "s";
+    };
+    const pass = door.querySelector("[data-pass]");
+    door.querySelector("[data-scan]").addEventListener("click", () => {
+      admittedAt = Date.now();
+      if (pass) pass.textContent = "Ya pasó";
+      verdict.className = "verdict ok";
+      verdict.innerHTML = "<b>Entró</b><span>Boleto 0419 de Foro Norte. Ya no se puede ceder.</span>";
+      when.textContent = "Presentación leída. Firma del titular.";
+    });
+    door.querySelector("[data-again]").addEventListener("click", () => {
+      verdict.className = "verdict bad";
+      if (!admittedAt) {
+        verdict.innerHTML = "<b>Todavía no hay entrada</b><span>Primero lee la presentación del teléfono.</span>";
+        return;
+      }
+      verdict.innerHTML = "<b>Ya pasó la puerta</b><span>El boleto 0419 ya pasó. La misma captura llega " + elapsed() + " tarde.</span>";
+      when.textContent = "Rechazado en esta pantalla.";
+    });
+  }
 })();
