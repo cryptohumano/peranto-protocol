@@ -71,7 +71,7 @@
               </div>
             </article>
           </div>
-          <p class="note">A la izquierda, la cartera en el teléfono. A la derecha, el puesto en la laptop: el código queda activo y la cámara coteja a quien presenta. La firma del reto es secp256k1.</p>
+          <p class="note">A la izquierda, la cartera en el teléfono. A la derecha, el puesto en la laptop: quien presenta queda en la bitácora, con la hora y el resultado.</p>
         </div>
       </div>
     </section>
@@ -89,21 +89,43 @@
           </div>
         </article>
         <article class="card">
-          <p class="kicker">Estándar criptográfico</p>
-          <h2>Identidad en el teléfono, código público.</h2>
-          <p>CiGo trabaja con credenciales que la persona guarda en su teléfono. El proyecto fue presentado en el hackathon del WSIS Forum de la UIT. Las claves de esa identidad no salen del teléfono.</p>
-          <div class="spec">
-            <div><span>Firma del reto</span><b>secp256k1</b></div>
-            <div><span>Huella del esquema</span><b>keccak256</b></div>
-            <div><span>Código</span><b>Público en GitHub</b></div>
-          </div>
+          <p class="kicker">Escritorio · Accesos</p>
+          <h2>El puesto sabe quién sigue adentro.</h2>
+          <p>Quien opera la puerta ve las entradas del día, las salidas y la visita abierta: nombre, credencial y desde qué hora. El libro se busca y se baja en CSV.</p>
+          <p class="meta"><a href="#accesos">Ver la bitácora</a></p>
         </article>
+      </div>
+    </section>
+
+    <section id="accesos">
+      <div class="wrap">
+        <p class="kicker">Bitácora del puesto</p>
+        <h2>Certeza de quién está adentro.</h2>
+        <p class="lead">Cada presentación queda en Accesos. El escritorio cuenta el día, separa entradas y salidas, y deja la visita abierta a la vista de quien opera la puerta.</p>
+        <figure class="shot">
+          <img src="media/escritorio-accesos.png" alt="Accesos en CiGo Escritorio: conteo del día, quién sigue adentro y visitas cerradas con su duración" />
+        </figure>
+        <div class="facts">
+          <article class="card">
+            <h3>Adentro ahora</h3>
+            <p>Nombre, credencial y desde qué hora. Cuando la persona sale, el guardia registra la salida en esa misma línea.</p>
+          </article>
+          <article class="card">
+            <h3>Cuánto tiempo estuvo</h3>
+            <p>Las visitas cerradas del día dicen la duración, en minutos o en menos de un minuto. Arriba quedan contadas las entradas y las salidas.</p>
+          </article>
+          <article class="card">
+            <h3>Qué presentó y a dónde iba</h3>
+            <p>El libro anota la credencial, si pasó, la vía y quién atestó. Si el puesto lo captura, también el destino y el lugar.</p>
+          </article>
+        </div>
+        <p class="note">Un día por tabla. La hora es la de la Ciudad de México. El libro queda en ese navegador y solo para la cartera que inició sesión. Se busca por nombre o credencial y se descarga en CSV.</p>
       </div>
     </section>
 
     <section id="arquitectura">
       <div class="wrap">
-        <p class="kicker">Arquitectura técnica</p>
+        <p class="kicker">En el puesto</p>
         <h2>Emisión y validación con la persona delante.</h2>
         <p class="lead">CiGo no manda un archivo por correo para que circule. El administrador abre un reto en el escritorio y la persona lo firma desde su teléfono, por NFC o con el QR del puesto.</p>
         <div class="steps">
@@ -122,12 +144,13 @@
             <h3>Validación en el puesto (~10 segundos)</h3>
             <p>La organización usa su laptop con el escritorio CiGo, un lector NFC comercial o la cámara para el QR.</p>
             <ul>
-              <li>Acercamiento, lectura, comprobación de la firma en esa máquina y bitácora en pantalla.</li>
-              <li>La firma se comprueba en el puesto. La laptop es de la organización; no hay una renta de nube para ese cálculo.</li>
+              <li>Acercamiento, lectura y la línea que queda en Accesos: hora, resultado y credencial.</li>
+              <li>La confirmación corre en la laptop de la organización.</li>
             </ul>
             <p class="meta">Hardware: laptop + lector USB</p>
           </article>
         </div>
+        <p class="note">La firma del reto es secp256k1 y la huella del esquema, keccak256. El código es público.</p>
       </div>
     </section>
 
@@ -380,6 +403,7 @@
         <h3>Infraestructura</h3>
         <ul>
           <li><a href="#cigo">Credencial</a></li>
+          <li><a href="#accesos">Bitácora del puesto</a></li>
           <li><a href="#productos">Boletos, voto, documentos y cosas</a></li>
           <li><a href="#casos">Casos, incluida la caseta</a></li>
           <li><a href="#plastico">Frente al plástico</a></li>
