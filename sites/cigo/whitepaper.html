@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CiGo · Apartado técnico</title>
+  <meta name="description" content="La red de cuidado de CiGo, y la criptografía del protocolo, de la cartera y del voto secreto." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=IBM+Plex+Mono:wght@400;500&family=Outfit:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="icon" href="media/peranto_mark.png" />
+  <style>
+    :root {
+      --night: #0a1018;
+      --deep: #1a5b92;
+      --bright: #3da1bc;
+      --paper: #f6f4ef;
+      --ink: #141c26;
+      --muted: #5c6b7a;
+      --line: rgba(20, 28, 38, 0.12);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--paper);
+      color: var(--ink);
+      font-family: Outfit, sans-serif;
+      font-size: 18px;
+      line-height: 1.6;
+    }
+    a { color: var(--deep); }
+    header {
+      background: var(--night);
+      color: white;
+      padding: 22px 0 48px;
+    }
+    nav, .lede, main, footer .wrap { width: min(760px, calc(100% - 40px)); margin: 0 auto; }
+    nav { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+    .brand { color: white; text-decoration: none; font-family: Fraunces, serif; font-size: 22px; }
+    .back, .back a { color: rgba(255,255,255,0.82); text-decoration: none; font-size: 14px; }
+    .eyebrow {
+      font-family: "IBM Plex Mono", monospace;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      font-size: 12px;
+      color: var(--bright);
+      margin: 36px 0 8px;
+    }
+    h1 {
+      font-family: Fraunces, serif;
+      font-weight: 500;
+      font-size: clamp(40px, 6vw, 64px);
+      line-height: 1.02;
+      letter-spacing: -0.03em;
+      margin: 0;
+    }
+    header p { max-width: 62ch; color: rgba(255,255,255,0.78); margin: 16px 0 0; }
+    main { padding: 12px 0 64px; }
+    h2 {
+      font-family: Fraunces, serif;
+      font-weight: 500;
+      font-size: 32px;
+      line-height: 1.15;
+      letter-spacing: -0.02em;
+      margin: 42px 0 10px;
+    }
+    p { margin: 0 0 14px; }
+    .muted { color: var(--muted); }
+    table { width: 100%; border-collapse: collapse; background: white; border-radius: 16px; overflow: hidden; margin: 16px 0 22px; }
+    th, td { text-align: left; padding: 12px 14px; border-bottom: 1px solid var(--line); vertical-align: top; font-size: 16px; }
+    th { color: var(--muted); font-weight: 500; }
+    code, .formula {
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 0.92em;
+    }
+    .formula {
+      background: var(--night);
+      color: white;
+      border-radius: 14px;
+      padding: 16px 18px;
+      margin: 12px 0 18px;
+    }
+    footer { padding: 0 0 40px; color: var(--muted); font-size: 14px; }
+  </style>
+</head>
+<body>
+  <header>
+    <nav>
+      <a class="brand" href="index.html">CiGo</a>
+      <span class="back"><a href="index.html#red">La red</a> · <a href="https://peranto.app">peranto.app</a></span>
+    </nav>
+    <div class="lede">
+      <p class="eyebrow">Apartado técnico</p>
+      <h1>La red y la criptografía.</h1>
+      <p>La primera parte dice cómo se cuenta el cuidado entre nodos: qué sube, qué se reparte y qué no es un token de CiGo. La segunda dice la criptografía que ya corre: la firma de la identidad, la bóveda del teléfono y el voto secreto. El alta de la beta, con su precio módico, es el ingreso de la organización al sistema. No es esta contabilidad.</p>
+    </div>
+  </header>
+  <main>
+    <h2>1. No hay un token de CiGo</h2>
+    <p>El protocolo no emite un activo propio. El peso económico es el token nativo de la red donde corre. En la red de prueba ese token es PAS. Crear la identidad no tiene costo de protocolo. Verificar una credencial tampoco. Quien paga gas lo paga a la red, no a una caja de CiGo.</p>
+    <p>En la red de prueba los fees de protocolo arrancan en cero: el mínimo para ser atestador, el fee de ancla y el fee de nombre. La regla de reparto de abajo describe qué pasa cuando sí hay valor en movimiento.</p>
+
+    <h2>2. La organización es un nodo</h2>
+    <p>Universidad, condominio, sindicato o cooperativa no son cuatro productos. Cada una es un nodo DisCO: miembros, gobernanza y un tesoro embebido en el propio nodo. Peranto entra como un nodo más, con la misma regla. No cobra un peaje aparte por ser quien publicó el protocolo.</p>
+    <p>La identidad de la persona es una sola, <code>did:peranto</code>. Los contadores de cuidado no crean otras identidades. Se anotan sobre esa, y se agregan en el nodo del periodo.</p>
+
+    <h2>3. Qué cuenta como cuidado</h2>
+    <p>La página llama «participar» y «emitir» a dos cosas que el nodo ya sabe medir.</p>
+    <table>
+      <thead>
+        <tr><th>En la página</th><th>En el nodo</th><th>Qué lo sube</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Cuidar</td><td>Care</td><td>Quien envía un reconocimiento (<code>tip</code>). El valor llega entero a quien lo recibe, o al nodo si el destino es el nodo.</td></tr>
+        <tr><td>Ser reconocido</td><td>Love</td><td>Quien recibe ese reconocimiento. También se agrega al nodo en el periodo.</td></tr>
+        <tr><td>Sostener</td><td>Vida</td><td>Quien aporta al nodo con <code>contribute</code>. Suben los puntos de sustento.</td></tr>
+        <tr><td>Emitir credenciales</td><td>Anclas</td><td>Cada credencial anclada (<code>recordAnchor</code>) cuenta. Emitir no es un trámite invisible: deja peso en la red.</td></tr>
+      </tbody>
+    </table>
+    <p class="muted">Un tip puede ir acompañado de una credencial <code>TipReceipt</code>. El contenido sensible sigue en la credencial. La red guarda el ancla y estos contadores, no el expediente.</p>
+
+    <h2>4. Aportar</h2>
+    <p>Cuando alguien aporta al nodo, el valor se parte así:</p>
+    <table>
+      <thead><tr><th>Destino</th><th>Parte</th></tr></thead>
+      <tbody>
+        <tr><td>Se queda en el nodo</td><td>97.5%</td></tr>
+        <tr><td>Va al tesoro común del protocolo</td><td>2.5%</td></tr>
+      </tbody>
+    </table>
+    <p>Ese 2.5% no es renta de una cuenta personal. Entra a <code>ProtocolTreasury</code>, un común temporal. Más adelante se reparte de vuelta a los nodos.</p>
+
+    <h2>5. La cosecha</h2>
+    <p>Cada periodo el nodo puede cosechar (<code>harvest</code>). El canon se calcula sobre el saldo que está por encima de una reserva mínima, <code>reserveFloor</code>. El porcentaje baja si el nodo ya está tejido con los demás, y sube si acaba de llegar o está aislado.</p>
+    <table>
+      <thead><tr><th>Situación del nodo</th><th>Canon</th></tr></thead>
+      <tbody>
+        <tr><td>Muy integrado: tiene reconocimiento y al menos el doble de los enlaces mínimos</td><td>1%</td></tr>
+        <tr><td>Integrado: tiene reconocimiento o al menos un enlace con otro nodo</td><td>2%</td></tr>
+        <tr><td>Nuevo (menos de 3 periodos) o aislado</td><td>5%</td></tr>
+      </tbody>
+    </table>
+    <p>El enlace mínimo <code>K</code> vale 1. El periodo, en el despliegue de referencia, es de unos 30 días de bloques. El canon cosechado también va al tesoro común.</p>
+
+    <h2>6. El reparto</h2>
+    <p>El tesoro común se devuelve a nodos, no a personas sueltas y no a una cuenta dueña del protocolo. Hace falta estar registrado, haber cosechado ese periodo, y tener al menos un miembro o algún contador de cuidado o de anclas en el periodo.</p>
+    <p>La mitad se reparte en partes iguales. La otra mitad se reparte según el peso del nodo:</p>
+    <p class="formula">peso = 5 × Care + 3 × Love + 1 × Anclas</p>
+    <p>Cuidar pesa más que ser reconocido, y ser reconocido pesa más que la ancla sola. Emitir credenciales sí cuenta: cada ancla suma uno. No cuenta más que el cuidado que sale del nodo.</p>
+    <p>Esa es la frase de la página, dicha con números: participar y emitir credenciales generan la red de cuidado, y el cuidado que una organización da pesa más que el que solo recibe.</p>
+
+    <h2>7. Qué no cobra el protocolo</h2>
+    <table>
+      <thead><tr><th>Acción</th><th>Costo de protocolo</th></tr></thead>
+      <tbody>
+        <tr><td>Crear la identidad</td><td>Ninguno</td></tr>
+        <tr><td>Verificar una credencial</td><td>Ninguno</td></tr>
+        <tr><td>Actualizar la identidad, anclar, revocar, registrar un nombre</td><td>Gas de la red. En la red de prueba, los fees añadidos de ancla, nombre y stake mínimo están en cero.</td></tr>
+      </tbody>
+    </table>
+    <p>Revocar una credencial solo puede hacerlo quien la emitió. Disolver un nodo vacía miembros y saldo; no revoca por sí solo las credenciales ya ancladas.</p>
+
+    <h2>8. Qué ve quien entra por la beta</h2>
+    <p>El precio módico es el alta de la organización: credenciales para su gente y votaciones sin tope de convocatorias. Cada persona sigue viendo solo la convocatoria que su credencial cubre. Ese alta no compra contadores ni abre el padrón de otra organización.</p>
+    <p>La red de cuidado es lo que pasa después, entre nodos: participación, emisión y el regreso del común. Quien no necesite los pesos puede quedarse en la página. Este apartado es la regla con la que el protocolo evita que el cuidado se quede en una sola caja.</p>
+
+    <h2 id="criptografia">9. La firma de la identidad</h2>
+    <p>La persona tiene un par de claves en la curva secp256k1. La clave privada firma. La pública comprueba. Esa es la criptografía asimétrica de la identidad: quien presenta el teléfono demuestra que tiene la clave, y el puesto no se queda con ella.</p>
+    <p>La credencial viaja como un JWT firmado con ES256K, el perfil de esa misma curva. El contenido queda en el teléfono. El registro público guarda el ancla: la huella, el emisor y si sigue vigente. No guarda el expediente.</p>
+    <table>
+      <thead><tr><th>Para qué</th><th>Primitiva</th></tr></thead>
+      <tbody>
+        <tr><td>Firma de la identidad y de la credencial</td><td>secp256k1, ES256K. No es una curva del catálogo NIST.</td></tr>
+        <tr><td>Huella de la credencial y del documento</td><td>SHA-256, FIPS 180-4.</td></tr>
+        <tr><td>Huella de esquema, anulador y ancla en la cadena</td><td>Keccak-256.</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="cartera">10. La bóveda del teléfono</h2>
+    <p>La cartera cifra en el propio teléfono la frase y las claves. El cifrado de esa bóveda es simétrico: AES-256-GCM. La clave sale de la contraseña con PBKDF2-HMAC-SHA256, 600&nbsp;000 iteraciones. La contraseña no se guarda. Si se olvida, nadie la recupera, tampoco Peranto.</p>
+    <p>Eso protege el aparato. No es el cifrado del voto. La firma que el teléfono presenta en el puesto sale de la clave asimétrica que esa bóveda guarda.</p>
+
+    <h2 id="voto">11. El voto secreto, cifrado y homomórfico</h2>
+    <p>Cuando la convocatoria es secreta, la boleta no sale en claro. La cartera la cifra con ElGamal exponencial sobre secp256k1, en la forma de ElectionGuard: <code>Enc(m) = (rG, rP + mG)</code>. <code>P</code> es la clave pública de la urna. Sumar textos cifrados suma las marcas. El cómputo abre el total de cada opción. Cada boleta sigue cerrada. Por eso el comprobante del teléfono no dice la opción.</p>
+    <p>La clave de apertura no la tiene una sola persona. Tres custodios arman una ceremonia de Feldman, umbral 2 de 3. Nadie reconstruye la clave privada completa. Hacen falta dos descifrados parciales para el total. Entre custodios, el fragmento viaja con ECDH en la misma curva y AES-256-GCM.</p>
+    <p>La cadena puede mostrar que hubo un depósito y qué dirección lo firmó. El secreto cubre la marca, no la lista de quienes depositaron. Si la convocatoria es visible, la marca no va por esta urna cifrada.</p>
+    <p>Un límite, dicho aquí para no darlo por cerrado: en la vía cívica, la cartera filtra la convocatoria según la credencial. La urna ya desplegada no vuelve a comparar la geografía al depositar. Cerrarlo es un tablero nuevo. Al 11 de octubre de 2026 ese despliegue no se ha hecho. La suma homomórfica de la boleta secreta sí corre, y no depende de ese cierre.</p>
+  </main>
+  <footer>
+    <div class="wrap">CiGo · Apartado técnico · <a href="https://peranto.app">peranto.app</a> · la firma, la bóveda y la urna están en el protocolo, no en un token de la marca.</div>
+  </footer>
+</body>
+</html>

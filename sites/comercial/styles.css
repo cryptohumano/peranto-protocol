@@ -270,6 +270,26 @@ h3 { margin: 0 0 8px; font-size: 26px; line-height: 1.15; }
 section { padding: 72px 0; }
 main > section + section { box-shadow: inset 0 1px 0 var(--line); }
 .band { background: var(--paper-dark); }
+.night-band { background: var(--night); color: #fff; }
+.hero + .night-band,
+.night-band + .night-band { box-shadow: none; }
+.night-band .kicker { color: var(--bright); }
+.night-band .lead,
+.night-band .note,
+.night-band .card p { color: rgba(255, 255, 255, 0.72); }
+.night-band h2,
+.night-band h3 { color: #fff; }
+.night-band .card {
+  background: var(--night-2);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+.night-band .pills span {
+  background: transparent;
+  border-color: rgba(255, 255, 255, 0.16);
+  color: rgba(255, 255, 255, 0.75);
+}
+.night-band a { color: var(--bright); }
+.night-band .shot img { border-color: rgba(255, 255, 255, 0.12); }
 .cards, .segments, .steps, .suite, .facts { display: grid; gap: 14px; margin-top: 22px; }
 .cards, .steps { grid-template-columns: 1fr 1fr; }
 .facts { grid-template-columns: 1fr 1fr 1fr; }
