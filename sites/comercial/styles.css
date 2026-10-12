@@ -1,7 +1,7 @@
 :root {
   --night: #070d18;
   --night-2: #090e1b;
-  --card: #0e172a;
+  --card: #131b2e;
   --card-2: #161b29;
   --line: #1e293b;
   --line-2: #2a3347;
@@ -110,13 +110,15 @@ h3 { margin: 0 0 8px; font-size: 22px; line-height: 1.15; }
 .btn.tiny { min-height: 38px; padding: 0 12px; font-size: 14px; }
 .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 22px; }
 
-.hero { padding: 54px 0 28px; }
+.hero { padding: 54px 0 36px; }
+.hero-copy { max-width: 740px; }
 .hero-grid, .split, .two, .calc, .close {
   display: grid;
   grid-template-columns: 1.05fr 0.95fr;
   gap: 22px;
   align-items: start;
 }
+.stage { margin-top: 36px; }
 .authority {
   display: inline-flex;
   gap: 8px;
@@ -133,18 +135,42 @@ h3 { margin: 0 0 8px; font-size: 22px; line-height: 1.15; }
 .trust { margin: 14px 0 0; color: var(--muted); font-size: 13px; }
 
 .sim {
-  background: var(--card);
-  border: 1px solid var(--line);
+  background: #0f172a;
+  border: 1px solid rgba(14, 165, 233, 0.18);
   border-radius: 22px;
-  padding: 14px;
+  padding: 18px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.28);
 }
-.sim-grid { display: grid; grid-template-columns: 0.82fr 1.18fr; gap: 12px; }
+.sim-grid {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  gap: 18px;
+  align-items: stretch;
+}
 .phone, .desk {
   background: var(--night-2);
   border: 1px solid var(--line);
   border-radius: 16px;
-  padding: 12px;
-  min-height: 280px;
+  padding: 14px;
+  min-height: 340px;
+}
+.device {
+  width: min(260px, 100%);
+  margin: 14px auto 0;
+  background: #05080f;
+  border: 1px solid #334155;
+  border-radius: 32px;
+  padding: 12px 10px 16px;
+  box-shadow: inset 0 0 0 2px #0b1220;
+}
+.device::before {
+  content: "";
+  display: block;
+  width: 78px;
+  height: 8px;
+  margin: 2px auto 12px;
+  border-radius: 99px;
+  background: #1e293b;
 }
 .tag { margin: 0; font-family: var(--mono); font-size: 10px; letter-spacing: 0.12em; color: var(--sky); }
 .pass {
@@ -173,13 +199,14 @@ h3 { margin: 0 0 8px; font-size: 22px; line-height: 1.15; }
 .meter span { display: block; height: 100%; width: 0; background: var(--sky); }
 .log {
   margin: 10px 0 0;
-  padding: 10px;
+  padding: 12px 14px;
   list-style: none;
   background: #070b14;
   border-radius: 10px;
-  min-height: 74px;
+  min-height: 96px;
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 13px;
+  line-height: 1.45;
   color: #86efac;
 }
 .log li + li { margin-top: 6px; }
@@ -199,6 +226,7 @@ section { padding: 64px 0; }
   border: 1px solid var(--line);
   border-radius: 18px;
   padding: 18px;
+  box-shadow: 0 0 0 1px rgba(14, 165, 233, 0.07), 0 18px 40px rgba(0, 0, 0, 0.22);
 }
 .card p, .segment p { margin: 0; color: var(--soft); }
 .pills { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
@@ -211,7 +239,15 @@ section { padding: 64px 0; }
 }
 .spec { margin-top: 14px; display: grid; gap: 8px; }
 .spec div { display: flex; justify-content: space-between; gap: 12px; border-top: 1px solid var(--line); padding-top: 8px; font-size: 14px; }
-.spec b { font-family: var(--mono); font-weight: 500; color: var(--sky); }
+.spec b {
+  font-family: var(--mono);
+  font-weight: 500;
+  color: #7dd3fc;
+  background: rgba(14, 165, 233, 0.16);
+  border: 1px solid rgba(14, 165, 233, 0.35);
+  border-radius: 999px;
+  padding: 3px 10px;
+}
 
 .step i { font-style: normal; font-family: var(--mono); color: var(--sky); font-size: 12px; }
 .step ul { margin: 10px 0 0; padding-left: 18px; color: var(--soft); }
@@ -220,6 +256,12 @@ section { padding: 64px 0; }
 .table-wrap { overflow-x: auto; margin-top: 18px; }
 table { width: 100%; border-collapse: collapse; min-width: 640px; }
 th, td { text-align: left; padding: 14px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th.win, td.win {
+  background: rgba(14, 165, 233, 0.1);
+  color: var(--text);
+}
+th.win { box-shadow: inset 0 2px 0 var(--sky); }
+.tick { color: #7dd3fc; margin-right: 6px; }
 th { color: var(--sky); font-family: var(--display); font-weight: 500; }
 td:first-child { color: var(--muted); width: 18%; }
 

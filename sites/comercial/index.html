@@ -22,7 +22,7 @@
         <a href="tickets.html">Tickets (en desarrollo)</a>
         <a href="#plastico">Frente al plástico</a>
         <a href="#simulador">Simulador en vivo</a>
-        <a href="#postular" data-wa>Hablar por WhatsApp</a>
+        <a href="#postular">Videollamada de 10 min</a>
         <a class="btn solid tiny" href="#postular">Piloto pionero (50 pases)</a>
       </nav>
     </div>
@@ -30,28 +30,30 @@
 
   <main>
     <section class="hero" id="cigo">
-      <div class="wrap hero-grid">
-        <div>
+      <div class="wrap">
+        <div class="hero-copy">
           <a class="authority" href="#pioneros">Reconocimiento internacional: hackathon WSIS Forum (UIT / Naciones Unidas)</a>
           <h1>La credencial infalsificable en el celular de tu comunidad.</h1>
           <p class="lead" style="margin-top:16px">Sustituye carnets de plástico y gafetes perdidos por una credencial que la persona lleva en su teléfono. El ciclo de validación en el puesto es de unos 10 segundos: lectura NFC o QR y comprobación de la firma en la laptop, con un lector USB de escritorio.</p>
           <div class="actions">
             <a class="btn solid" href="#postular">Postular a piloto pionero (50 pases)</a>
-            <a class="btn ghost" href="#postular" data-wa>Hablar directo por WhatsApp</a>
+            <a class="btn ghost" href="#postular">Solicitar videollamada de 10 min</a>
           </div>
           <p class="trust">Despliegue guiado con el fundador · Lector NFC estándar en la PC · El puesto es una laptop de la organización.</p>
         </div>
 
-        <div class="sim" id="simulador" data-sim>
+        <div class="sim stage" id="simulador" data-sim>
           <div class="sim-grid">
             <article class="phone">
               <p class="tag">Hardware emulado · CiGo Sovereign Pass</p>
-              <div class="pass">
-                <span>Campus Norte</span>
-                <b>Ana Ruiz C.</b>
-                <span>Estudiante / miembro titular · 2024-010-0914</span>
-                <div class="qr" role="img" aria-label="Reto dinámico de demostración"></div>
-                <span data-sign>Reto dinámico criptográfico</span>
+              <div class="device">
+                <div class="pass">
+                  <span>Campus Norte</span>
+                  <b>Ana Ruiz C.</b>
+                  <span>Estudiante / miembro titular · 2024-010-0914</span>
+                  <div class="qr" role="img" aria-label="Reto dinámico de demostración"></div>
+                  <span data-sign>Reto dinámico criptográfico</span>
+                </div>
               </div>
               <!-- Para la prueba en video: <video src="demo.mp4" autoplay muted loop playsinline></video> -->
             </article>
@@ -136,14 +138,14 @@
         <div class="table-wrap">
           <table>
             <thead>
-              <tr><th></th><th>Carnet de PVC</th><th>CiGo</th></tr>
+              <tr><th></th><th>Carnet de PVC</th><th class="win">CiGo</th></tr>
             </thead>
             <tbody>
-              <tr><td>Emisión</td><td>Imprenta y reparto.</td><td>Reto en el escritorio. La persona firma desde su teléfono.</td></tr>
-              <tr><td>Puerta</td><td>Tarjeta física o lista en papel.</td><td>Laptop de la organización, lector NFC USB o cámara para el QR.</td></tr>
-              <tr><td>Extravío</td><td>Reimprimir y volver a entregar.</td><td>Se revoca la credencial anterior y se emite otra en presencia.</td></tr>
-              <tr><td>Ciclo</td><td>Días de imprenta.</td><td>Verificación en el puesto en unos 10 segundos.</td></tr>
-              <tr><td>Padrón</td><td>CSV o lista aparte.</td><td>Cada credencial corresponde al teléfono que firmó el reto.</td></tr>
+              <tr><td>Emisión</td><td>Imprenta y reparto.</td><td class="win"><span class="tick">✓</span>Reto en el escritorio. La persona firma desde su teléfono.</td></tr>
+              <tr><td>Puerta</td><td>Tarjeta física o lista en papel.</td><td class="win"><span class="tick">✓</span>Laptop de la organización, lector NFC USB o cámara para el QR.</td></tr>
+              <tr><td>Extravío</td><td>Reimprimir y volver a entregar.</td><td class="win"><span class="tick">✓</span>Se revoca la credencial anterior y se emite otra en presencia.</td></tr>
+              <tr><td>Ciclo</td><td>Días de imprenta.</td><td class="win"><span class="tick">✓</span>Verificación en el puesto en unos 10 segundos.</td></tr>
+              <tr><td>Padrón</td><td>CSV o lista aparte.</td><td class="win"><span class="tick">✓</span>Cada credencial corresponde al teléfono que firmó el reto.</td></tr>
             </tbody>
           </table>
         </div>
@@ -253,7 +255,7 @@
 
     <section class="band" id="postular">
       <div class="wrap close">
-        <form class="card" data-form>
+        <form class="card" id="solicitud" data-form>
           <p class="kicker">Programa de pilotos pioneros</p>
           <h2>Postula tu institución a 50 credenciales.</h2>
           <p class="lead">Deja los datos para coordinar la instalación del escritorio y la sesión de atestación.</p>
@@ -289,9 +291,8 @@
         <aside class="card">
           <p class="kicker">Contacto directo</p>
           <h3>Edgar · fundador y arquitecto de CiGo</h3>
-          <p>Si prefieres una demo de 10 minutos, deja tu WhatsApp en el formulario. Ahí se coordina la emisión en presencia y la lectura en el puesto.</p>
-          <a class="btn solid" href="#postular" data-wa>Escribir al WhatsApp de Edgar</a>
-          <p class="note">El número público de WhatsApp todavía no está en esta página. El botón lleva al formulario para dejar el tuyo.</p>
+          <p>Deja tus datos y coordinamos una videollamada de 10 minutos: emisión en presencia en tu teléfono y lectura en la laptop del puesto.</p>
+          <a class="btn solid" href="#solicitud">Solicitar videollamada de 10 min</a>
           <p class="meta">WSIS Forum · UIT / ONU</p>
         </aside>
       </div>
@@ -326,7 +327,7 @@
         <h3>Contacto</h3>
         <ul>
           <li><a href="#postular">Programa piloto pionero</a></li>
-          <li><a href="#postular" data-wa>WhatsApp con Edgar</a></li>
+          <li><a href="#postular">Videollamada de 10 min</a></li>
           <li><a href="mailto:outreach@peranto.app">outreach@peranto.app</a></li>
         </ul>
       </div>
