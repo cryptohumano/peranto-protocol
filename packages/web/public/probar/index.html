@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CiGo · Pase de prueba</title>
+  <link rel="did-configuration" href="../.well-known/did-configuration.json" />
+  <link rel="stylesheet" href="./app.css" />
+</head>
+<body>
+  <main>
+    <p class="mark">CiGo</p>
+    <h1>Pase de prueba</h1>
+    <p class="lead">Conecta Aura, o abre esta página en el navegador de CiGo. La cartera firma un pase de día y marca la cuenta en la taquilla. El gas lo paga esa cuenta en la red de pruebas Paseo. Aquí no hay servidor.</p>
+
+    <form id="form">
+      <label>
+        Nombre en el pase
+        <input id="name" name="name" autocomplete="name" maxlength="80" required placeholder="Como quieres que te vea la puerta" />
+      </label>
+      <label>
+        Fotografía
+        <input id="photo" name="photo" type="file" accept="image/*" />
+      </label>
+      <p class="hint">Si no eliges foto, el pase lleva un recuadro con tu nombre. La puerta lo muestra al presentarlo.</p>
+      <button id="go" type="submit">Obtener pase</button>
+    </form>
+
+    <p id="status" class="status" role="status"></p>
+    <section id="done" hidden>
+      <h2>Listo</h2>
+      <p id="summary"></p>
+      <p class="hash" id="hash"></p>
+      <p><a href="https://tickets.peranto.app">Comprar en la taquilla</a></p>
+    </section>
+  </main>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
