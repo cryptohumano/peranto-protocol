@@ -21,12 +21,10 @@
       <button class="menu-btn" type="button" aria-expanded="false" aria-controls="menu">Menú</button>
       <a class="wsis" href="https://www.itu.int/net4/wsis/forum/2023/Files/ocp/WF23OCPP5PRES-en.pdf" target="_blank" rel="noopener noreferrer">WSIS Forum Hackathon · UIT / ONU</a>
       <nav class="links" id="menu">
-        <a href="#cigo">CiGo</a>
-        <a href="tickets.html">Tickets (en desarrollo)</a>
-        <a href="#plastico">Frente al plástico</a>
-        <a href="#simulador">La demostración</a>
-        <a href="#postular">Videollamada de 10 min</a>
-        <a class="btn solid tiny" href="#postular">Piloto pionero (50 pases)</a>
+        <a href="#cigo">Credencial</a>
+        <a href="#productos">Productos</a>
+        <a href="#casos">Casos</a>
+        <a class="btn solid tiny" href="#postular">Piloto de 50 pases</a>
       </nav>
     </div>
   </header>
@@ -198,35 +196,85 @@
       </div>
     </section>
 
-    <section class="band">
+    <section id="productos">
       <div class="wrap">
-        <p class="kicker">Soluciones de misión crítica</p>
-        <h2>Para quien ya opera una comunidad.</h2>
-        <p class="lead">El mismo puesto —laptop y lector— cambia de oficio según la organización.</p>
+        <p class="kicker">En el mismo teléfono</p>
+        <h2>La credencial abre el resto.</h2>
+        <p class="lead">Boletos, voto, documentos y cosas no son sitios sueltos. Viven en la cartera de CiGo, atados a la misma identidad.</p>
+        <div class="suite">
+          <article class="card product">
+            <img src="media/app-presentar.jpg" alt="Pantalla Presentar de CiGo: credencial de elector y lectura NFC" />
+            <h3>Presentar</h3>
+            <p>La persona acerca el teléfono al lector, o muestra el código si el puesto no tiene NFC. La credencial de identidad sigue en la cartera.</p>
+          </article>
+          <article class="card product">
+            <img src="media/app-boletos.jpg" alt="Boleto en la cartera: ya entró y no se puede ceder" />
+            <h3>Boletos</h3>
+            <p>El pase se presenta, se cede una vez o vuelve a la taquilla. Cuando ya pasó la puerta, no se cede ni se devuelve. El precio es el de cara.</p>
+            <p class="meta"><a href="tickets.html">Cómo se lee en la puerta</a> · <a href="https://tickets.peranto.app">Cartelera</a></p>
+          </article>
+          <article class="card product">
+            <img src="media/app-voto.jpg" alt="Historial de voto en CiGo, con comprobante que no revela la opción" />
+            <h3>Voto</h3>
+            <p>La boleta pide una credencial vigente. El comprobante no dice la opción. Queda la transacción y el periodo.</p>
+          </article>
+          <article class="card product">
+            <img src="media/app-documentos.jpg" alt="Documento firmado con la credencial, activo en la cadena" />
+            <h3>Documentos</h3>
+            <p>La firma es la del sujeto de la credencial. La huella del archivo es la de la prueba, y el vínculo nombra esa credencial.</p>
+          </article>
+          <article class="card product">
+            <img src="media/app-cosa.jpg" alt="Pasaporte de un objeto en CiGo, con custodio e historial de entrega" />
+            <h3>Cosas</h3>
+            <p>Un objeto lleva pasaporte: qué es, quién lo custodia y cuándo se entregó. El historial cambia de manos sin un PDF suelto.</p>
+          </article>
+          <article class="card product">
+            <img src="media/app-qr.jpg" alt="Presentación de un boleto con código de un solo uso y cuenta regresiva" />
+            <h3>El código caduca</h3>
+            <p>La presentación del boleto dura unos segundos. Una captura del grupo llega tarde: al entrar, el boleto deja de poder cederse.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="band" id="casos">
+      <div class="wrap">
+        <p class="kicker">Dónde se usa</p>
+        <h2>La caseta, el aula, la asamblea y la fila.</h2>
+        <p class="lead">El puesto es la laptop de la organización y un lector USB, o la cámara. Estas escenas muestran el oficio, no un torniquete obligatorio.</p>
         <div class="segments">
-          <article class="segment">
-            <p class="kicker">Sector educativo</p>
-            <h3>Universidades e institutos</h3>
-            <p>Biblioteca, laboratorio y acreditación. El estudiante presenta el teléfono ante el lector o la cámara de la laptop y el encargado ve la confirmación en pantalla.</p>
-            <p class="meta">Laptop + lector USB NFC</p>
+          <article class="segment photo">
+            <img src="media/caso-campus.jpg" alt="Estudiante presenta el teléfono frente a una laptop y un lector en un escritorio" />
+            <div>
+              <p class="kicker">Universidad</p>
+              <h3>Biblioteca y laboratorio</h3>
+              <p>El estudiante presenta el teléfono. Quien atiende ve la confirmación en la laptop.</p>
+            </div>
           </article>
-          <article class="segment">
-            <p class="kicker">Condominios y privadas</p>
-            <h3>Caseta y asamblea</h3>
-            <p>Pase de residente en la caseta. La asamblea se convoca a quien tiene la credencial vigente, y el voto se emite desde el teléfono del propietario.</p>
-            <p class="meta">Voto en el smartphone de quien está al corriente</p>
+          <article class="segment photo">
+            <img src="media/caso-caseta.jpg" alt="Caseta de condominio con laptop, lector y el teléfono de quien entra" />
+            <div>
+              <p class="kicker">Condominio</p>
+              <h3>Repartidores sin dejar la INE</h3>
+              <p>Hoy el repartidor deja la INE en la caseta para entrar al condominio o al estacionamiento. Con CiGo presenta la credencial en su teléfono. El guardia la lee en la laptop. La identificación física no se queda en el escritorio.</p>
+            </div>
           </article>
-          <article class="segment">
-            <p class="kicker">Colegios y gremios</p>
-            <h3>Sindicatos y colegios profesionales</h3>
-            <p>Padrón de agremiados en la credencial de cada quien. Las votaciones de directiva y las consultas de sección se abren solo a la credencial vigente.</p>
-            <p class="meta">Boleta comprobable, sin abrir el padrón de otro gremio</p>
+          <article class="segment photo">
+            <img src="media/caso-asamblea.jpg" alt="Asamblea en una mesa, con el teléfono de quien vota" />
+            <div>
+              <p class="kicker">Gremio y asamblea</p>
+              <h3>El voto sale del teléfono</h3>
+              <p>La asamblea se abre a quien tiene la credencial vigente. El comprobante no publica la opción.</p>
+            </div>
           </article>
-          <article class="segment">
-            <p class="kicker">Tickets · en evolución</p>
-            <h3>Eventos</h3>
-            <p>En la puerta, la cámara de la laptop lee la presentación firmada. La misma captura, la segunda vez, ya no pasa. El precio de cara y la cesión única ya están en el protocolo.</p>
-            <p class="meta"><a href="tickets.html">Ver el estado de Tickets</a></p>
+          <article class="segment photo">
+            <img src="media/caso-foro.jpg" alt="Fila de un foro, con el boleto presentado desde el teléfono" />
+            <div>
+              <p class="kicker">Foro</p>
+              <h3>La fila y el boleto</h3>
+              <p>En la puerta, la cámara de la laptop lee la presentación firmada. La misma captura, la segunda vez, ya no pasa.</p>
+              <p class="meta"><a href="tickets.html">La puerta, sin molinete</a></p>
+            </div>
           </article>
         </div>
       </div>
@@ -269,6 +317,7 @@
             <select name="kind" required>
               <option>Universidad / escuela</option>
               <option>Condominio / residencial</option>
+              <option>Caseta: repartidores y estacionamiento</option>
               <option>Sindicato / colegio profesional</option>
               <option>Cooperativa / comunidad</option>
             </select>
@@ -318,10 +367,10 @@
       <div>
         <h3>Infraestructura</h3>
         <ul>
-          <li><a href="#cigo">CiGo credenciales</a></li>
-          <li><a href="tickets.html">Tickets (en desarrollo)</a></li>
-          <li><a href="#plastico">Reemplazo del plástico</a></li>
-          <li><a href="#calculadora">Simulador</a></li>
+          <li><a href="#cigo">Credencial</a></li>
+          <li><a href="#productos">Boletos, voto, documentos y cosas</a></li>
+          <li><a href="#casos">Casos, incluida la caseta</a></li>
+          <li><a href="#plastico">Frente al plástico</a></li>
         </ul>
       </div>
       <div>

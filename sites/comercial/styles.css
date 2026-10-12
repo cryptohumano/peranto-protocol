@@ -269,9 +269,30 @@ h3 { margin: 0 0 8px; font-size: 26px; line-height: 1.15; }
 
 section { padding: 72px 0; }
 .band { background: var(--paper-dark); }
-.cards, .segments, .steps { display: grid; gap: 14px; margin-top: 22px; }
+.cards, .segments, .steps, .suite { display: grid; gap: 14px; margin-top: 22px; }
 .cards, .steps { grid-template-columns: 1fr 1fr; }
-.segments { grid-template-columns: 1fr 1fr; }
+.segments, .suite { grid-template-columns: 1fr 1fr; }
+.product { padding: 0; overflow: hidden; }
+.product img {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: var(--night);
+}
+.segment.photo > img {
+  display: block;
+  width: 100%;
+  height: 220px;
+  object-fit: cover;
+  object-position: center;
+  background: var(--night);
+}
+.product h3, .product p { margin-left: 18px; margin-right: 18px; }
+.product h3 { margin-top: 16px; }
+.product p:last-child { margin-bottom: 18px; }
+.segment.photo { padding: 0; overflow: hidden; }
+.segment.photo > img { height: 220px; object-position: center; }
+.segment.photo > div { padding: 18px; }
 .card, .segment {
   background: var(--card);
   border: 1px solid var(--line);
@@ -443,7 +464,8 @@ footer .meta { color: rgba(255, 255, 255, 0.5); }
   .links a, .links .btn { width: 100%; }
 }
 @media (max-width: 900px) {
-  .hero-grid, .split, .two, .calc, .close, .cards, .steps, .segments, .sim-grid, .door-grid, .foot { grid-template-columns: 1fr; }
+  .hero-grid, .split, .two, .calc, .close, .cards, .steps, .segments, .suite, .sim-grid, .door-grid, .foot { grid-template-columns: 1fr; }
+  .product img { height: auto; }
   .hero { padding: 40px 0 32px; }
   section { padding: 48px 0; }
   .figure b { font-size: 36px; }
