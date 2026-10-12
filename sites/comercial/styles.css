@@ -162,6 +162,11 @@ h3 { margin: 0 0 8px; font-size: 22px; line-height: 1.15; }
   background: #05080f;
   border: 1px solid #334155;
 }
+.reel.wide {
+  width: 100%;
+  margin: 12px 0 0;
+  border-radius: 12px;
+}
 .tag { margin: 0; font-family: var(--mono); font-size: 10px; letter-spacing: 0.12em; color: var(--sky); }
 .pass {
   margin-top: 12px;

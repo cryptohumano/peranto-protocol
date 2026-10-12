@@ -42,27 +42,18 @@
           <p class="trust">Despliegue guiado con el fundador · Lector NFC estándar en la PC · El puesto es una laptop de la organización.</p>
         </div>
 
-        <div class="sim stage" id="simulador" data-sim>
+        <div class="sim stage" id="simulador">
           <div class="sim-grid">
             <article class="phone">
               <p class="tag">Cartera en el teléfono</p>
               <video class="reel" src="presentacion.mp4" autoplay muted loop playsinline aria-label="Presentación de la credencial en la cartera de CiGo"></video>
-              <span data-sign hidden>Reto dinámico criptográfico</span>
             </article>
             <article class="desk">
-              <p class="tag">Puesto de control CiGo desktop</p>
-              <h3>PC + lector USB / NFC</h3>
-              <p data-status>Esperando presentación de wallet</p>
-              <p>La persona acerca el teléfono al lector NFC o muestra el QR a la cámara de la laptop.</p>
-              <p>Ciclo de verificación completo: ~10 s</p>
-              <div class="meter" aria-hidden="true"><span data-bar></span></div>
-              <ul class="log" data-log>
-                <li>[09:12:44] Servicio de escritorio listo. Lector NFC conectado. READY</li>
-              </ul>
-              <button class="btn solid" type="button" data-run style="margin-top:12px">Simular verificación (~10 s)</button>
+              <p class="tag">Puesto de control en la laptop</p>
+              <video class="reel wide" src="puesto.mp4" autoplay muted loop playsinline aria-label="El escritorio de CiGo leyendo la credencial en el puesto"></video>
             </article>
           </div>
-          <p class="note">A la izquierda, la cartera de CiGo en el teléfono. A la derecha, el puesto simulado: laptop de la organización y lector NFC USB. La firma del reto en ese puesto es secp256k1.</p>
+          <p class="note">A la izquierda, la cartera en el teléfono. A la derecha, el puesto en la laptop: el código queda activo y la cámara coteja a quien presenta. La firma del reto es secp256k1.</p>
         </div>
       </div>
     </section>
