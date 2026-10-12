@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CiGo digital tickets · The screenshot does not get in</title>
+  <meta name="description" content="Digital tickets at face value. At the door, the laptop camera reads a signed presentation. The same screenshot, the second time, does not get in." />
+  <link rel="canonical" href="https://pioneros.peranto.app/en/tickets.html" />
+  <link rel="alternate" hreflang="es" href="https://pioneros.peranto.app/tickets.html" />
+  <link rel="alternate" hreflang="en" href="https://pioneros.peranto.app/en/tickets.html" />
+  <link rel="alternate" hreflang="x-default" href="https://pioneros.peranto.app/tickets.html" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Newsreader:opsz,wght@6..72,500;6..72,600&family=Source+Sans+3:wght@400;500;600&display=swap" rel="stylesheet" />
+  <meta name="theme-color" content="#0a1018" />
+  <link rel="stylesheet" href="../styles.css" />
+</head>
+<body>
+  <header class="nav">
+    <div class="nav-inner">
+      <a class="brand" href="index.html" aria-label="Peranto">
+        <img class="brand-logo" src="../logo-peranto.png" alt="Peranto" width="140" height="58" />
+      </a>
+      <button class="menu-btn" type="button" aria-expanded="false" aria-controls="menu">Menu</button>
+      <a class="wsis" href="https://www.itu.int/net4/wsis/forum/2023/Files/ocp/WF23OCPP5PRES-en.pdf" target="_blank" rel="noopener noreferrer">WSIS Forum Hackathon · ITU / UN</a>
+      <nav class="links" id="menu">
+        <a href="index.html#cigo">Credential</a>
+        <a href="index.html#productos">Products</a>
+        <a href="#puerta">The door</a>
+        <a href="index.html#postular">50-pass pilot</a>
+      </nav>
+      <a class="lang" href="../tickets.html" hreflang="es" lang="es">ES</a>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="wrap hero-grid">
+        <div>
+          <p class="kicker">Box office · hall, theater, conference</p>
+          <h1>The WhatsApp screenshot does not get in.</h1>
+          <p class="lead" style="margin-top:16px">The ticket is not a PDF or a link for the group chat. The buyer carries it in their wallet and, at the door, shows a signed presentation that expires. The staff laptop points its camera. The first read marks the entry. The photo they sent to four friends arrives late.</p>
+          <div class="actions">
+            <a class="btn solid" href="#puerta">Try the same screenshot</a>
+            <a class="btn ghost" href="#corte">See the ticketing fee</a>
+          </div>
+          <p class="trust">A real desk: the staff laptop or phone, the Door screen, the camera. No turnstile.</p>
+        </div>
+        <div class="sim" id="puerta" data-door>
+          <div class="door-grid">
+            <article class="phone">
+              <p class="tag">Wallet · ticket 0419</p>
+              <div class="boleto">
+                <span class="muted">North Hall · General</span>
+                <strong>Luis Herrera</strong>
+                <div class="row"><span>Show</span><b>Saturday 20:00</b></div>
+                <div class="row"><span>Face value</span><b>$450</b></div>
+                <div class="row"><span>Status</span><b data-pass>Unused</b></div>
+                <p class="code">cigo:boleto:419.1760220000.a4c1…e90 demonstration signature</p>
+              </div>
+              <p class="note">That string expires. A group-chat screenshot stops working as soon as it expires, or as soon as someone has already gone through.</p>
+            </article>
+            <article class="desk">
+              <p class="tag">Door screen</p>
+              <h3>The desk camera</h3>
+              <p data-when>Point it at the code on the phone, not at a printed PDF.</p>
+              <div class="verdict" data-verdict>
+                <b>Waiting</b>
+                <span>The account that created the show, or someone on its list, is who marks the entry.</span>
+              </div>
+              <div class="actions">
+                <button class="btn solid" type="button" data-scan>Read this ticket</button>
+                <button class="btn ghost" type="button" data-again>Try the same screenshot</button>
+              </div>
+            </article>
+          </div>
+          <p class="note">A demonstration on this page. At the desk, the duplicate message is: “This ticket already went through the door.” Marking entry is a write to the box office: if the venue loses the network, the camera sees the code and the mark does not close.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="band">
+      <div class="wrap">
+        <p class="kicker">How the line works</p>
+        <h2>Three things the protocol already does.</h2>
+        <div class="steps">
+          <article class="card step">
+            <i>01 · Listing</i>
+            <h3>You publish price and capacity</h3>
+            <p>Title, face value and capacity. Once tickets are sold, that price stays fixed, so a return is still the same amount.</p>
+          </article>
+          <article class="card step">
+            <i>02 · Purchase</i>
+            <h3>Up to four per person</h3>
+            <p>Each purchase pays face value, not one peso more inside the contract. It can be transferred once, as a gift or up to that price. A second transfer does not exist.</p>
+          </article>
+          <article class="card step">
+            <i>03 · Door</i>
+            <h3>The signature has to be the holder's</h3>
+            <p>The camera reads <span class="code" style="display:inline">cigo:boleto:…</span>. If the signature is not the current holder's, they do not enter. If they already went through, the screen says so and the ticket can no longer be transferred or returned.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="corte">
+      <div class="wrap">
+        <p class="kicker">The settlement</p>
+        <h2>What a ticketing company keeps, and what this box office does not take.</h2>
+        <p class="lead">For halls of 500 to 3,000 people, the hit is usually a 12% to 18% fee and money that arrives weeks later. Here the buyer pays face value. The contract does not keep a percentage. The withdrawal is made by whoever created the show, when the window closes.</p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th></th><th>The usual ticketing company</th><th>Peranto box office</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>In the line</td>
+                <td>A PDF or a screenshot forwarded on WhatsApp.</td>
+                <td>A signed presentation on the phone, with an expiry time.</td>
+              </tr>
+              <tr>
+                <td>The same photo</td>
+                <td>Several people try the same file.</td>
+                <td>The second read says that ticket already went through the door.</td>
+              </tr>
+              <tr>
+                <td>Fee</td>
+                <td>12% to 18% on top of the price, charged to the public.</td>
+                <td>What comes in is face value. There is no protocol percentage on the purchase or the withdrawal.</td>
+              </tr>
+              <tr>
+                <td>When you get paid</td>
+                <td>Settlement usually arrives days or weeks after the show.</td>
+                <td>Whoever created the show withdraws it, when the window they published closes.</td>
+              </tr>
+              <tr>
+                <td>Equipment</td>
+                <td>The ticketing company's app, if its network answers.</td>
+                <td>The team's laptop or phone, with the camera on the Door screen.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="calc" data-fee style="margin-top:22px">
+          <form class="card">
+            <label class="field">Capacity
+              <input type="number" name="cap" min="50" max="20000" value="800" />
+            </label>
+            <label class="field">Face value (MXN)
+              <input type="number" name="face" min="50" max="20000" value="450" />
+            </label>
+            <label class="field">Ticketing fee the public pays today (%)
+              <input type="number" name="cut" min="0" max="30" value="15" />
+            </label>
+            <p class="note">800 × $450 × 15% = $54,000. That is the extra money in the fee, not a commission this box office charges.</p>
+          </form>
+          <article class="figure">
+            <span class="muted">Fee the public pays on top</span>
+            <b data-leak>$54,000</b>
+            <span class="muted" data-detail></span>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="band">
+      <div class="wrap cards">
+        <article class="card">
+          <h3>If they do not go</h3>
+          <p>Before going through, the ticket can return to the box office. The buyer gets their share back and the seat returns to sale. After the door, there is no transfer and no return.</p>
+        </article>
+        <article class="card">
+          <h3>Who marks the entry</h3>
+          <p>The account that created the show, or an address on the list it built. Another wallet cannot mark a ticket for that show as entered.</p>
+          <p class="meta"><a href="index.html#postular">If you also want a community credential, the pilot is on CiGo.</a></p>
+        </article>
+      </div>
+    </section>
+  </main>
+  <footer>
+    <div class="wrap legal"><a href="index.html">CiGo</a> · Box office · <a href="https://github.com/cryptohumano/peranto-protocol">GitHub</a></div>
+  </footer>
+  <script src="../site.js"></script>
+</body>
+</html>

@@ -1,0 +1,513 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CiGo · Digital credential and access control for communities</title>
+  <meta name="description" content="A digital credential on the phone for campuses, condominiums and unions. The gate checks the registry, keeps the visit log and, in the same wallet, tickets and assembly voting. A 50-pass pilot." />
+  <link rel="canonical" href="https://pioneros.peranto.app/en/" />
+  <link rel="alternate" hreflang="es" href="https://pioneros.peranto.app/" />
+  <link rel="alternate" hreflang="en" href="https://pioneros.peranto.app/en/" />
+  <link rel="alternate" hreflang="x-default" href="https://pioneros.peranto.app/" />
+  <meta property="og:type" content="website" />
+  <meta property="og:locale" content="en_US" />
+  <meta property="og:site_name" content="CiGo pioneros" />
+  <meta property="og:url" content="https://pioneros.peranto.app/en/" />
+  <meta property="og:title" content="CiGo · Digital credential and access control for communities" />
+  <meta property="og:description" content="A credential on the phone, a gatehouse log, tickets and assembly voting. The desk checks the anchored registry. A 50-pass pilot." />
+  <meta property="og:image" content="https://pioneros.peranto.app/media/caso-caseta.jpg" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "Organization",
+        "name": "Peranto",
+        "url": "https://peranto.app/",
+        "sameAs": ["https://cigo.peranto.app/", "https://pioneros.peranto.app/", "https://www.linkedin.com/in/edogasalinas"]
+      },
+      {
+        "@type": "WebSite",
+        "name": "CiGo pioneros",
+        "url": "https://pioneros.peranto.app/en/",
+        "inLanguage": "en",
+        "description": "Digital credential, access control and a visit log for campuses, condominiums and unions."
+      },
+      {
+        "@type": "Person",
+        "name": "Edgar Salinas",
+        "jobTitle": "Founder of CiGo",
+        "url": "https://cryptohumano.github.io/peranto-protocol/#/u/@edo",
+        "sameAs": ["https://www.linkedin.com/in/edogasalinas", "https://cryptohumano.github.io/peranto-protocol/#/u/@edo"]
+      },
+      {
+        "@type": "FAQPage",
+        "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "What happens if the gatehouse loses internet?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "The gate stops. The desk checks the registry anchored on the chain to see whether the credential is still valid. Without internet, that check does not close and there is no pass. The person does not need internet: the CiGo wallet carries the credential on the phone."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "How is it issued so someone else cannot keep the pass?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "The administrator opens the challenge on the desk and the person signs it from their phone, by NFC or with the registration QR. The credential stays bound to that phone's keys."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Why does validation take about 10 seconds?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "The cycle we measure includes bringing the phone close, the NFC read or the QR focus, the signature check on the desk and the line the guard sees in the log. That cycle is above: the wallet on the phone and the desk on the laptop."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "What equipment is required?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "The organization's computer running the CiGo desk, internet at the gate, and a USB NFC reader or the camera for the QR. The desk does not require a turnstile or a separate server."
+            }
+          }
+        ]
+      }
+    ]
+  }
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Newsreader:opsz,wght@6..72,500;6..72,600&family=Source+Sans+3:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../styles.css" />
+  <meta name="theme-color" content="#0a1018" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect fill='%230a1018' width='32' height='32' rx='8'/%3E%3Ccircle cx='16' cy='16' r='5' fill='%233da1bc'/%3E%3C/svg%3E" />
+</head>
+<body>
+  <header class="nav">
+    <div class="nav-inner">
+      <a class="brand" href="index.html" aria-label="Peranto">
+        <img class="brand-logo" src="../logo-peranto.png" alt="Peranto" width="140" height="58" />
+      </a>
+      <button class="menu-btn" type="button" aria-expanded="false" aria-controls="menu">Menu</button>
+      <a class="wsis" href="https://www.itu.int/net4/wsis/forum/2023/Files/ocp/WF23OCPP5PRES-en.pdf" target="_blank" rel="noopener noreferrer">WSIS Forum Hackathon · UIT / ONU</a>
+      <nav class="links" id="menu">
+        <a href="#cigo">Credential</a>
+        <a href="#productos">Products</a>
+        <a href="#casos">Cases</a>
+        <a class="btn solid tiny" href="#postular">50-pass pilot</a>
+      </nav>
+      <a class="lang" href="../" hreflang="es" lang="es">ES</a>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero" id="cigo">
+      <div class="wrap">
+        <div class="hero-copy">
+          <a class="authority" href="https://www.itu.int/net4/wsis/forum/2023/Files/ocp/WF23OCPP5PRES-en.pdf" target="_blank" rel="noopener noreferrer">International recognition: WSIS Forum hackathon (ITU / United Nations)</a>
+          <h1>An unforgeable credential on your community's phone.</h1>
+          <p class="lead" style="margin-top:16px">It replaces plastic cards and lost badges with a digital credential on the phone. At the gate, access control checks the registry and leaves the log: who entered, who is still inside and how long they stayed. The desk cycle is about 10 seconds, with an NFC reader or the laptop camera.</p>
+          <div class="actions">
+            <a class="btn solid" href="#postular">Apply for the pioneer pilot (50 passes)</a>
+            <a class="btn ghost" href="https://calendly.com/edoga-salinas/one-click-kyc" target="_blank" rel="noopener noreferrer">Book a 10-minute call</a>
+          </div>
+          <p class="trust">Setup guided by the founder · A standard NFC reader on the PC · The desk is the organization's laptop.</p>
+        </div>
+
+        <div class="sim stage" id="simulador">
+          <div class="sim-grid">
+            <article class="phone">
+              <p class="tag">Wallet on the phone</p>
+              <div class="handset">
+                <span class="notch" aria-hidden="true"></span>
+                <div class="screen">
+                  <video class="reel" poster="../miniatura-telefono.webp" autoplay muted loop playsinline aria-label="Presenting the credential in the CiGo wallet">
+                    <source src="../presentacion.mp4" type="video/mp4" />
+                  </video>
+                </div>
+              </div>
+            </article>
+            <article class="desk">
+              <p class="tag">Control desk on the laptop</p>
+              <div class="window">
+                <div class="titlebar">
+                  <span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>
+                  <span>CiGo Escritorio</span>
+                </div>
+                <div class="screen wide">
+                  <video class="reel wide" poster="../miniatura-escritorio.webp" autoplay muted loop playsinline aria-label="The CiGo desk reading the credential at the gate">
+                    <source src="../puesto.mp4" type="video/mp4" />
+                  </video>
+                </div>
+              </div>
+            </article>
+          </div>
+          <p class="note">On the left, the wallet on the phone. On the right, the desk on the laptop: whoever presents is written into the log, with the time and the result.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="night-band" id="pioneros">
+      <div class="wrap cards">
+        <article class="card">
+          <p class="kicker">Pioneer call · 50 pilot passes</p>
+          <h2>Pioneer organizations ready to leave PVC behind.</h2>
+          <p>A pilot of 50 credentials for universities, residences and unions. The founder helps set up the desk, and the plan is built from the community's real volume.</p>
+          <div class="pills">
+            <span>Universities — student identity</span>
+            <span>Condominiums — access and assemblies</span>
+            <span>Unions and professional bodies — roll and quorum</span>
+          </div>
+        </article>
+        <article class="card">
+          <p class="kicker">Desk · Access</p>
+          <h2>The desk knows who is still inside.</h2>
+          <p>Whoever runs the door sees the day's entries, the exits and the open visit: name, credential and since what time. The book can be searched and downloaded as CSV.</p>
+          <p class="meta"><a href="#accesos">See the log</a></p>
+        </article>
+      </div>
+    </section>
+
+    <section class="night-band" id="accesos">
+      <div class="wrap">
+        <p class="kicker">Desk log</p>
+        <h2>Certainty about who is inside.</h2>
+        <p class="lead">Every presentation is written to Access. The desk counts the day, separates entries and exits, and keeps the open visit in front of whoever runs the door.</p>
+        <figure class="shot">
+          <img src="../media/escritorio-accesos.png" alt="Access on the CiGo desk: the day's count, who is still inside, and closed visits with their duration" />
+        </figure>
+        <div class="facts">
+          <article class="card">
+            <h3>Inside now</h3>
+            <p>Name, credential and since what time. When the person leaves, the guard records the exit on that same line.</p>
+          </article>
+          <article class="card">
+            <h3>How long they stayed</h3>
+            <p>Closed visits for the day show the duration, in minutes or under a minute. Entries and exits are counted above.</p>
+          </article>
+          <article class="card">
+            <h3>What they presented and where they were going</h3>
+            <p>The book records the credential, whether they passed, the channel and who attested. If the desk captures it, the destination and the place are recorded too.</p>
+          </article>
+        </div>
+        <p class="note">One day per table. The time is Mexico City time. The book stays in that browser and only for the wallet that signed in. Search by name or credential, and download CSV.</p>
+      </div>
+    </section>
+
+    <section id="arquitectura">
+      <div class="wrap">
+        <p class="kicker">At the desk</p>
+        <h2>Issuance and validation with the person present.</h2>
+        <p class="lead">CiGo does not email a file for people to pass around. The administrator opens a challenge on the desk and the person signs it from their phone, by NFC or with the desk QR.</p>
+        <div class="steps">
+          <article class="card step">
+            <i>Step 1</i>
+            <h3>Issuance with a challenge, in person</h3>
+            <p>The administrator generates the challenge in the desk app. The person presents the wallet on their phone and signs that challenge.</p>
+            <ul>
+              <li>The credential is bound to that phone's keys.</li>
+              <li>The administrator does not take the person's keys.</li>
+            </ul>
+            <p class="meta">Attestation protocol · wallet on the phone</p>
+          </article>
+          <article class="card step">
+            <i>Step 2</i>
+            <h3>Validation at the desk (~10 seconds)</h3>
+            <p>The organization uses its laptop with the CiGo desk, a commercial NFC reader, or the camera for the QR.</p>
+            <ul>
+              <li>Approach, read, and the line left in Access: time, result and credential.</li>
+              <li>The confirmation runs on the organization's laptop.</li>
+            </ul>
+            <p class="meta">Hardware: laptop + USB reader</p>
+          </article>
+        </div>
+        <p class="note">The challenge signature is secp256k1. The phone vault and the homomorphic vote are in the <a href="https://cigo.peranto.app/whitepaper.html#criptografia">technical note</a>.</p>
+      </div>
+    </section>
+
+    <section id="plastico">
+      <div class="wrap">
+        <p class="kicker">Operational comparison</p>
+        <h2>Against the plastic card.</h2>
+        <p class="lead">A PVC card is printed, lost and replaced. CiGo issues it in person and validates it at the desk.</p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th></th><th>PVC card</th><th class="win">CiGo</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Issuance</td><td>Print shop and hand-out.</td><td class="win"><span class="tick">✓</span>A challenge on the desk. The person signs from their phone.</td></tr>
+              <tr><td>Door</td><td>A physical card or a paper list.</td><td class="win"><span class="tick">✓</span>The organization's laptop, a USB NFC reader, or the camera for the QR.</td></tr>
+              <tr><td>Loss</td><td>Reprint and hand it out again.</td><td class="win"><span class="tick">✓</span>The previous credential is revoked and another is issued in person.</td></tr>
+              <tr><td>Cycle</td><td>Days at the print shop.</td><td class="win"><span class="tick">✓</span>A check at the desk in about 10 seconds.</td></tr>
+              <tr><td>Roll</td><td>A separate CSV or list.</td><td class="win"><span class="tick">✓</span>Each credential matches the phone that signed the challenge.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section id="calculadora">
+      <div class="wrap">
+        <p class="kicker">Impact estimate</p>
+        <h2>The plastic and the PVC spend you can stop repeating.</h2>
+        <p class="lead">Move the parameters. The result is an estimate for deciding on the pilot, not a print-shop quote.</p>
+        <div class="calc" data-calc>
+          <div class="figures">
+            <article class="figure">
+              <span class="muted">Avoidable PVC spend over 3 years</span>
+              <b data-spend>$31,200</b>
+              <span class="muted">Initial printing and estimated replacements.</span>
+            </article>
+            <article class="figure">
+              <span class="muted">PVC waste</span>
+              <b data-kg>~3.25 kg</b>
+              <span class="muted">Cards that do not need to be made.</span>
+            </article>
+            <article class="figure good">
+              <span class="muted">Pioneer pilot</span>
+              <b>50 credentials</b>
+              <span class="muted">The plan for full scale is set with the organization.</span>
+              <a class="btn solid" href="#postular">Apply for 50 pilot credentials</a>
+            </article>
+          </div>
+          <form class="card">
+            <label class="field">People in the organization
+              <output data-members>500</output>
+              <span class="stepper">
+                <button type="button" data-step="-1" aria-label="Fewer people">−</button>
+                <input type="range" name="members" min="50" max="3000" step="10" value="500" />
+                <button type="button" data-step="1" aria-label="More people">+</button>
+              </span>
+            </label>
+            <label class="field">Estimated cost per card, lanyard and holder (MXN)
+              <output data-cost>$48</output>
+              <span class="stepper">
+                <button type="button" data-step="-1" aria-label="Lower the cost">−</button>
+                <input type="range" name="cost" min="20" max="150" step="1" value="48" />
+                <button type="button" data-step="1" aria-label="Raise the cost">+</button>
+              </span>
+            </label>
+            <label class="field">Annual replacement for loss or wear
+              <output data-rate>15%</output>
+              <span class="stepper">
+                <button type="button" data-step="-1" aria-label="Lower the replacement rate">−</button>
+                <input type="range" name="rate" min="5" max="40" step="1" value="15" />
+                <button type="button" data-step="1" aria-label="Raise the replacement rate">+</button>
+              </span>
+            </label>
+            <p class="note" data-formula></p>
+          </form>
+        </div>
+      </div>
+    </section>
+
+    <section class="night-band" id="productos">
+      <div class="wrap">
+        <p class="kicker">On the same phone</p>
+        <h2>The credential opens the rest.</h2>
+        <p class="lead">Tickets, voting, documents and things are not separate sites. They live in the CiGo wallet, bound to the same identity.</p>
+        <div class="suite">
+          <article class="card product">
+            <img src="../media/app-presentar.jpg" alt="CiGo Present screen: voter credential and NFC read" />
+            <h3>Present</h3>
+            <p>The person brings the phone to the reader, or shows the code if the desk has no NFC. The identity credential stays in the wallet.</p>
+          </article>
+          <article class="card product">
+            <img src="../media/app-boletos.jpg" alt="A ticket in the wallet: already admitted, and it can no longer be transferred" />
+            <h3>Tickets</h3>
+            <p>The pass is presented, transferred once, or returned to the box office. Once it has gone through the door, it cannot be transferred or returned. The price is face value.</p>
+            <p class="meta"><a href="tickets.html">How the door reads it</a> · <a href="https://tickets.peranto.app">Listings</a></p>
+          </article>
+          <article class="card product">
+            <img src="../media/app-voto.jpg" alt="CiGo vote history, with a receipt that does not reveal the choice" />
+            <h3>Vote</h3>
+            <p>The ballot asks for a valid credential. The receipt does not say the choice. The transaction and the period remain.</p>
+          </article>
+          <article class="card product">
+            <img src="../media/app-documentos.jpg" alt="A document signed with the credential, active on the chain" />
+            <h3>Documents</h3>
+            <p>The signature is the credential subject's. The file hash is the proof, and the link names that credential.</p>
+          </article>
+          <article class="card product">
+            <img src="../media/app-cosa.jpg" alt="An object passport in CiGo, with a custodian and a handoff history" />
+            <h3>Things</h3>
+            <p>An object carries a passport: what it is, who holds it and when it was handed over. The history changes hands without a loose PDF.</p>
+          </article>
+          <article class="card product">
+            <img src="../media/app-qr.jpg" alt="A ticket presentation with a single-use code and a countdown" />
+            <h3>The code expires</h3>
+            <p>The ticket presentation lasts a few seconds. A screenshot in the group chat arrives late: once someone enters, the ticket can no longer be transferred.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="casos">
+      <div class="wrap">
+        <p class="kicker">Where it is used</p>
+        <h2>The gate, the classroom, the assembly and the line.</h2>
+        <p class="lead">The desk is the organization's laptop and a USB reader, or the camera. These scenes show the job, not a required turnstile.</p>
+        <div class="segments">
+          <article class="segment photo">
+            <img src="../media/caso-campus.jpg" alt="A student presents the phone in front of a laptop and a reader on a desk" />
+            <div>
+              <p class="kicker">University</p>
+              <h3>Library and lab</h3>
+              <p>The student presents the phone. The person at the desk sees the confirmation on the laptop.</p>
+            </div>
+          </article>
+          <article class="segment photo">
+            <img src="../media/caso-caseta.jpg" alt="A condominium gate with a laptop, a reader and the phone of the person entering" />
+            <div>
+              <p class="kicker">Condominium</p>
+              <h3>Couriers without leaving their ID</h3>
+              <p>Today a food courier leaves their government ID at the gate to enter the condominium or the parking lot. With CiGo they present the credential on their phone. The guard reads it on the laptop. The physical ID does not stay on the desk.</p>
+            </div>
+          </article>
+          <article class="segment photo">
+            <img src="../media/caso-asamblea.jpg" alt="An assembly at a table, with the voter's phone" />
+            <div>
+              <p class="kicker">Union and assembly</p>
+              <h3>The vote comes from the phone</h3>
+              <p>The assembly opens to whoever holds a valid credential. The receipt does not publish the choice.</p>
+            </div>
+          </article>
+          <article class="segment photo">
+            <img src="../media/caso-foro.jpg" alt="A venue line, with the ticket presented from the phone" />
+            <div>
+              <p class="kicker">Venue</p>
+              <h3>The line and the ticket</h3>
+              <p>At the door, the laptop camera reads the signed presentation. The same screenshot, the second time, does not get in.</p>
+              <p class="meta"><a href="tickets.html">The door, without a turnstile</a></p>
+            </div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="preguntas">
+      <div class="wrap">
+        <p class="kicker">Technical questions</p>
+        <h2>Questions from directors and administrators.</h2>
+        <p class="lead">Issuance, hardware, and what the desk laptop does.</p>
+        <details open>
+          <summary>What happens if the gatehouse loses internet?</summary>
+          <p>The gate stops. The desk checks the registry anchored on the chain to see whether the credential is still valid. Without internet, that check does not close and there is no pass. The person does not need internet: the CiGo wallet carries the credential on the phone.</p>
+        </details>
+        <details>
+          <summary>How is it issued so someone else cannot keep the pass?</summary>
+          <p>The administrator opens the challenge on the desk and the person signs it from their phone, by NFC or with the registration QR. The credential stays bound to that phone's keys.</p>
+        </details>
+        <details>
+          <summary>Why does validation take about 10 seconds?</summary>
+          <p>The cycle we measure includes bringing the phone close, the NFC read or the QR focus, the signature check on the desk and the line the guard sees in the log. That cycle is above: the wallet on the phone and the desk on the laptop.</p>
+        </details>
+        <details>
+          <summary>What equipment is required?</summary>
+          <p>The organization's computer running the CiGo desk, internet at the gate, and a USB NFC reader or the camera for the QR. The desk does not require a turnstile or a separate server.</p>
+        </details>
+      </div>
+    </section>
+
+    <section class="band" id="postular">
+      <div class="wrap close">
+        <form class="card" id="solicitud" data-form>
+          <p class="kicker">Pioneer pilot program</p>
+          <h2>Apply your institution for 50 credentials.</h2>
+          <p class="lead">Leave your details so we can schedule the desk setup and the attestation session.</p>
+          <label class="field">Lead name
+            <input name="name" required maxlength="120" placeholder="e.g. Carlos Méndez" autocomplete="name" />
+          </label>
+          <label class="field">Organization type
+            <select name="kind" required>
+              <option>University / school</option>
+              <option>Condominium / residence</option>
+              <option>Gate: couriers and parking</option>
+              <option>Union / professional body</option>
+              <option>Cooperative / community</option>
+            </select>
+          </label>
+          <label class="field">Estimated number of members
+            <input name="size" required maxlength="20" placeholder="e.g. 350 people" inputmode="numeric" />
+          </label>
+          <label class="field">Work email
+            <input name="email" type="email" required maxlength="120" placeholder="carlos.mendez@tuorganizacion.edu.mx" autocomplete="email" />
+          </label>
+          <label class="field">Phone or WhatsApp
+            <input name="phone" required maxlength="30" placeholder="+52 55 1234 5678" autocomplete="tel" />
+          </label>
+          <fieldset class="via">
+            <legend>Send the application by</legend>
+            <label><input type="radio" name="via" value="wa" checked /> WhatsApp</label>
+            <label><input type="radio" name="via" value="mail" /> Email</label>
+          </fieldset>
+          <div class="actions">
+            <button class="btn solid" type="submit" data-send>Open WhatsApp with this application</button>
+          </div>
+          <p class="note">Submitting opens WhatsApp or your email with these details. This page does not store them on a server.</p>
+          <div class="ready" data-ready hidden>
+            <p data-status></p>
+            <p data-summary></p>
+            <button class="btn ghost" type="button" data-copy>Copy application</button>
+          </div>
+        </form>
+        <aside class="card">
+          <p class="kicker">Direct contact</p>
+          <h3>Edgar · founder and architect of CiGo</h3>
+          <p>Book 10 minutes. On the call we look at issuance on your phone and the read on the desk laptop.</p>
+          <a class="btn solid" href="https://calendly.com/edoga-salinas/one-click-kyc" target="_blank" rel="noopener noreferrer">Book a 10-minute call</a>
+          <p class="meta"><a href="https://www.linkedin.com/in/edogasalinas" target="_blank" rel="noopener noreferrer">LinkedIn</a> · <a href="https://cryptohumano.github.io/peranto-protocol/#/u/@edo">Public page</a> · <a href="https://wa.me/525621208481?text=Hello%20Edgar%2C%20I%20want%20the%2010-minute%20CiGo%20pilot%20call.">WhatsApp</a></p>
+        </aside>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap foot">
+      <div>
+        <h3><a href="https://peranto.app">Peranto</a> / CiGo</h3>
+        <p>Credential, access and voting for an organization. The desk runs on the laptop of whoever operates the door.</p>
+        <p class="meta">WSIS Forum · UIT / ONU</p>
+      </div>
+      <div>
+        <h3>Infrastructure</h3>
+        <ul>
+          <li><a href="#cigo">Credential</a></li>
+          <li><a href="#accesos">Desk log</a></li>
+          <li><a href="#productos">Tickets, voting, documents and things</a></li>
+          <li><a href="#casos">Cases, including the gate</a></li>
+          <li><a href="#plastico">Against plastic</a></li>
+        </ul>
+      </div>
+      <div>
+        <h3>Code and audit</h3>
+        <ul>
+          <li><a href="https://github.com/cryptohumano/peranto-protocol">Code on GitHub</a></li>
+          <li><a href="https://cigo.peranto.app/whitepaper.html">Technical note</a></li>
+          <li><a href="https://cigo.peranto.app">CiGo</a></li>
+          <li><a href="https://peranto.app">peranto.app</a></li>
+        </ul>
+      </div>
+      <div>
+        <h3>Contact</h3>
+        <ul>
+          <li><a href="#postular">Pioneer pilot program</a></li>
+          <li><a href="https://calendly.com/edoga-salinas/one-click-kyc" target="_blank" rel="noopener noreferrer">10-minute call</a></li>
+          <li><a href="mailto:outreach@peranto.app">outreach@peranto.app</a></li>
+          <li><a href="https://www.linkedin.com/in/edogasalinas" target="_blank" rel="noopener noreferrer">Edgar on LinkedIn</a></li>
+          <li><a href="https://cryptohumano.github.io/peranto-protocol/#/u/@edo">Public page</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="wrap legal">© 2026 <a href="https://peranto.app">Peranto</a> / CiGo. <a href="https://cigo.peranto.app/whitepaper.html">Technical note</a></div>
+  </footer>
+  <script src="../site.js"></script>
+</body>
+</html>

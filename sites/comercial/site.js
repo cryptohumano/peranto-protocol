@@ -1,7 +1,19 @@
 (function () {
+  const en = document.documentElement.lang === "en";
   const WA_NUMBER = "525621208481";
   const MAIL_TO = "outreach@peranto.app";
   const money = new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 });
+  const num = new Intl.NumberFormat(en ? "en-US" : "es-MX");
+
+  document.querySelectorAll("a.lang").forEach((link) => {
+    link.addEventListener("click", (event) => {
+      if (!location.hash) return;
+      event.preventDefault();
+      const url = new URL(link.href, location.href);
+      url.hash = location.hash;
+      location.href = url.href;
+    });
+  });
 
   const menuBtn = document.querySelector(".menu-btn");
   const menu = document.querySelector("#menu");
@@ -87,18 +99,22 @@
       const c = Number(cost.value);
       const r = Number(rate.value) / 100;
       const cards = n * (1 + r * 2);
-      out.members.textContent = n.toLocaleString("es-MX");
+      out.members.textContent = num.format(n);
       out.cost.textContent = money.format(c);
       out.rate.textContent = rate.value + "%";
       const spend = Math.round(cards * c);
-      const kg = (cards * 0.005).toLocaleString("es-MX", { maximumFractionDigits: 2 });
+      const kg = (cards * 0.005).toLocaleString(en ? "en-US" : "es-MX", { maximumFractionDigits: 2 });
       out.spend.textContent = money.format(spend);
       out.kg.textContent = "~" + kg + " kg";
       const formula = calc.querySelector("[data-formula]");
       if (formula) {
-        formula.textContent = "Una emisión más dos años de reposición, a 5 g por tarjeta. Con "
-          + n.toLocaleString("es-MX") + " personas, " + money.format(c) + " y " + rate.value
-          + " %, el gasto sale en " + money.format(spend) + " y el plástico en ~" + kg + " kg.";
+        formula.textContent = en
+          ? "One issue plus two years of replacement, at 5 g per card. With "
+            + num.format(n) + " people, " + money.format(c) + " and " + rate.value
+            + "%, the spend comes to " + money.format(spend) + " and the plastic to ~" + kg + " kg."
+          : "Una emisión más dos años de reposición, a 5 g por tarjeta. Con "
+            + num.format(n) + " personas, " + money.format(c) + " y " + rate.value
+            + " %, el gasto sale en " + money.format(spend) + " y el plástico en ~" + kg + " kg.";
       }
     };
     [members, cost, rate].forEach((input) => input.addEventListener("input", paint));
@@ -121,8 +137,8 @@
     const status = form.querySelector("[data-status]");
     const send = form.querySelector("[data-send]");
     const labelFor = () => (form.querySelector('[name="via"]:checked')?.value === "mail"
-      ? "Abrir el correo con la postulación"
-      : "Abrir WhatsApp con la postulación");
+      ? (en ? "Open email with this application" : "Abrir el correo con la postulación")
+      : (en ? "Open WhatsApp with this application" : "Abrir WhatsApp con la postulación"));
     form.querySelectorAll('[name="via"]').forEach((input) => {
       input.addEventListener("change", () => { send.textContent = labelFor(); });
     });
@@ -130,7 +146,16 @@
       event.preventDefault();
       const data = new FormData(form);
       const name = String(data.get("name")).trim();
-      const text = [
+      const text = (en ? [
+        "Application · CiGo pioneer pilot",
+        "Lead: " + name,
+        "Organization: " + String(data.get("kind")),
+        "Members: " + String(data.get("size")).trim(),
+        "Email: " + String(data.get("email")).trim(),
+        "Phone: " + String(data.get("phone")).trim(),
+        "Pilot: 50 credentials",
+        "I want the 10-minute call.",
+      ] : [
         "Postulación · Piloto pionero CiGo",
         "Responsable: " + name,
         "Organización: " + String(data.get("kind")),
@@ -139,15 +164,17 @@
         "Teléfono: " + String(data.get("phone")).trim(),
         "Piloto: 50 credenciales",
         "Quiero la videollamada de 10 minutos.",
-      ].join("\n");
+      ]).join("\n");
       summary.textContent = text;
       ready.hidden = false;
       ready.dataset.text = text;
       if (data.get("via") === "mail") {
         window.location.href = "mailto:" + MAIL_TO
-          + "?subject=" + encodeURIComponent("Postulación piloto pionero CiGo — " + name)
+          + "?subject=" + encodeURIComponent((en ? "CiGo pioneer pilot application — " : "Postulación piloto pionero CiGo — ") + name)
           + "&body=" + encodeURIComponent(text);
-        status.textContent = "Se abrió el correo con esta postulación, dirigida a " + MAIL_TO + ".";
+        status.textContent = en
+          ? "Email opened with this application, addressed to " + MAIL_TO + "."
+          : "Se abrió el correo con esta postulación, dirigida a " + MAIL_TO + ".";
         return;
       }
       const link = document.createElement("a");
@@ -155,15 +182,17 @@
       link.target = "_blank";
       link.rel = "noopener noreferrer";
       link.click();
-      status.textContent = "Se abrió WhatsApp con esta postulación, al +52 56 2120 8481.";
+      status.textContent = en
+        ? "WhatsApp opened with this application, to +52 56 2120 8481."
+        : "Se abrió WhatsApp con esta postulación, al +52 56 2120 8481.";
     });
     form.querySelector("[data-copy]").addEventListener("click", async () => {
       const button = form.querySelector("[data-copy]");
       try {
         await navigator.clipboard.writeText(ready.dataset.text || summary.textContent);
-        button.textContent = "Copiado";
+        button.textContent = en ? "Copied" : "Copiado";
       } catch {
-        button.textContent = "Selecciona el texto y cópialo";
+        button.textContent = en ? "Select the text and copy it" : "Selecciona el texto y cópialo";
       }
     });
   }
@@ -181,7 +210,9 @@
       const pct = Number(cut.value) || 0;
       const extra = Math.round(n * price * (pct / 100));
       leak.textContent = money.format(extra);
-      detail.textContent = n.toLocaleString("es-MX") + " boletos a " + money.format(price) + " con " + pct + "% de cargo.";
+      detail.textContent = en
+        ? num.format(n) + " tickets at " + money.format(price) + " with a " + pct + "% fee."
+        : num.format(n) + " boletos a " + money.format(price) + " con " + pct + "% de cargo.";
     };
     [cap, face, cut].forEach((input) => input.addEventListener("input", paint));
     paint();
@@ -201,19 +232,25 @@
     const pass = door.querySelector("[data-pass]");
     door.querySelector("[data-scan]").addEventListener("click", () => {
       admittedAt = Date.now();
-      if (pass) pass.textContent = "Ya pasó";
+      if (pass) pass.textContent = en ? "Used" : "Ya pasó";
       verdict.className = "verdict ok";
-      verdict.innerHTML = "<b>Entró</b><span>Boleto 0419 de Foro Norte. Ya no se puede ceder.</span>";
-      when.textContent = "Presentación leída. Firma del titular.";
+      verdict.innerHTML = en
+        ? "<b>Admitted</b><span>Ticket 0419, North Hall. It can no longer be transferred.</span>"
+        : "<b>Entró</b><span>Boleto 0419 de Foro Norte. Ya no se puede ceder.</span>";
+      when.textContent = en ? "Presentation read. Holder's signature." : "Presentación leída. Firma del titular.";
     });
     door.querySelector("[data-again]").addEventListener("click", () => {
       verdict.className = "verdict bad";
       if (!admittedAt) {
-        verdict.innerHTML = "<b>Todavía no hay entrada</b><span>Primero lee la presentación del teléfono.</span>";
+        verdict.innerHTML = en
+          ? "<b>No entry yet</b><span>Read the phone presentation first.</span>"
+          : "<b>Todavía no hay entrada</b><span>Primero lee la presentación del teléfono.</span>";
         return;
       }
-      verdict.innerHTML = "<b>Ya pasó la puerta</b><span>El boleto 0419 ya pasó. La misma captura llega " + elapsed() + " tarde.</span>";
-      when.textContent = "Rechazado en esta pantalla.";
+      verdict.innerHTML = en
+        ? "<b>Already through the door</b><span>Ticket 0419 already passed. The same screenshot arrives " + elapsed() + " late.</span>"
+        : "<b>Ya pasó la puerta</b><span>El boleto 0419 ya pasó. La misma captura llega " + elapsed() + " tarde.</span>";
+      when.textContent = en ? "Rejected on this screen." : "Rechazado en esta pantalla.";
     });
   }
 })();
