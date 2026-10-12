@@ -3,8 +3,81 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>CiGo · La credencial de tu comunidad</title>
-  <meta name="description" content="Credencial infalsificable en el celular. Validación en el puesto con laptop y lector NFC, en un ciclo de unos 10 segundos. Piloto pionero de 50 pases." />
+  <title>CiGo · Credencial digital y control de acceso para comunidades</title>
+  <meta name="description" content="Credencial digital en el celular para condominios, universidades y gremios. La caseta revisa el registro, lleva la bitácora de visitas y, en la misma cartera, boletos y votación de asamblea. Piloto de 50 pases." />
+  <link rel="canonical" href="https://pioneros.peranto.app/" />
+  <meta property="og:type" content="website" />
+  <meta property="og:locale" content="es_MX" />
+  <meta property="og:site_name" content="CiGo pioneros" />
+  <meta property="og:url" content="https://pioneros.peranto.app/" />
+  <meta property="og:title" content="CiGo · Credencial digital y control de acceso para comunidades" />
+  <meta property="og:description" content="Credencial en el celular, bitácora de la caseta, boletos y votación de asamblea. El puesto revisa el registro anclado. Piloto de 50 pases." />
+  <meta property="og:image" content="https://pioneros.peranto.app/media/caso-caseta.jpg" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "Organization",
+        "name": "Peranto",
+        "url": "https://peranto.app/",
+        "sameAs": ["https://cigo.peranto.app/", "https://pioneros.peranto.app/", "https://www.linkedin.com/in/edogasalinas"]
+      },
+      {
+        "@type": "WebSite",
+        "name": "CiGo pioneros",
+        "url": "https://pioneros.peranto.app/",
+        "inLanguage": "es-MX",
+        "description": "Credencial digital, control de acceso y bitácora para condominios, universidades y gremios."
+      },
+      {
+        "@type": "Person",
+        "name": "Edgar Salinas",
+        "jobTitle": "Fundador de CiGo",
+        "url": "https://cryptohumano.github.io/peranto-protocol/#/u/@edo",
+        "sameAs": ["https://www.linkedin.com/in/edogasalinas", "https://cryptohumano.github.io/peranto-protocol/#/u/@edo"]
+      },
+      {
+        "@type": "FAQPage",
+        "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "¿Qué pasa si se cae el internet en la caseta?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "La caseta se detiene. El puesto consulta el registro anclado en la cadena para saber si la credencial sigue vigente. Sin internet, esa revisión no cierra y no hay pase. Quien no necesita internet es la persona: la cartera de CiGo lleva la credencial en el teléfono."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "¿Cómo se emite sin que otra persona se quede el pase?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "El administrador abre el reto en el escritorio y la persona lo firma con su teléfono, por NFC o con el QR del registro. La credencial queda ligada a las claves de ese teléfono."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "¿Por qué la validación toma unos 10 segundos?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "El ciclo que medimos en operación incluye acercar el teléfono, la lectura NFC o el enfoque del QR, la comprobación de la firma en el escritorio y la línea que ve el guardia en la bitácora. Arriba se ve ese ciclo: la cartera en el teléfono y el puesto en la laptop."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "¿Qué equipo hace falta?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Una computadora de la organización con el escritorio CiGo, internet en la caseta, y un lector USB NFC o la cámara para el QR. El puesto no pide un torniquete ni un servidor aparte."
+            }
+          }
+        ]
+      }
+    ]
+  }
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Newsreader:opsz,wght@6..72,500;6..72,600&family=Source+Sans+3:wght@400;500;600&display=swap" rel="stylesheet" />
@@ -35,7 +108,7 @@
         <div class="hero-copy">
           <a class="authority" href="https://www.itu.int/net4/wsis/forum/2023/Files/ocp/WF23OCPP5PRES-en.pdf" target="_blank" rel="noopener noreferrer">Reconocimiento internacional: hackathon WSIS Forum (UIT / Naciones Unidas)</a>
           <h1>La credencial infalsificable en el celular de tu comunidad.</h1>
-          <p class="lead" style="margin-top:16px">Sustituye carnets de plástico y gafetes perdidos por una credencial que la persona lleva en su teléfono. El ciclo de validación en el puesto es de unos 10 segundos: lectura NFC o QR y comprobación de la firma en la laptop, con un lector USB de escritorio.</p>
+          <p class="lead" style="margin-top:16px">Sustituye carnets de plástico y gafetes perdidos por una credencial digital en el teléfono. En la caseta, el control de acceso revisa el registro y deja la bitácora: quién entró, quién sigue adentro y cuánto tiempo estuvo. El ciclo en el puesto es de unos 10 segundos, con lector NFC o la cámara de la laptop.</p>
           <div class="actions">
             <a class="btn solid" href="#postular">Postular a piloto pionero (50 pases)</a>
             <a class="btn ghost" href="https://calendly.com/edoga-salinas/one-click-kyc" target="_blank" rel="noopener noreferrer">Agendar videollamada de 10 min</a>
@@ -322,7 +395,7 @@
         <p class="lead">Emisión, hardware y qué hace la laptop del puesto.</p>
         <details open>
           <summary>¿Qué pasa si se cae el internet en la caseta?</summary>
-          <p>La firma del reto se comprueba en la laptop del puesto. Ese cálculo no consulta una base de datos en una nube de terceros. La vigencia que mira la ancla de revocación usa la red cuando el puesto la tiene.</p>
+          <p>La caseta se detiene. El puesto consulta el registro anclado en la cadena para saber si la credencial sigue vigente. Sin internet, esa revisión no cierra y no hay pase. Quien no necesita internet es la persona: la cartera de CiGo lleva la credencial en el teléfono.</p>
         </details>
         <details>
           <summary>¿Cómo se emite sin que otra persona se quede el pase?</summary>
@@ -334,7 +407,7 @@
         </details>
         <details>
           <summary>¿Qué equipo hace falta?</summary>
-          <p>Una computadora de la organización con el escritorio CiGo y un lector USB NFC, o la cámara para el QR. El puesto no pide un torniquete ni un servidor aparte.</p>
+          <p>Una computadora de la organización con el escritorio CiGo, internet en la caseta, y un lector USB NFC o la cámara para el QR. El puesto no pide un torniquete ni un servidor aparte.</p>
         </details>
       </div>
     </section>
@@ -386,7 +459,7 @@
           <h3>Edgar · fundador y arquitecto de CiGo</h3>
           <p>Agenda 10 minutos. En la llamada vemos la emisión en tu teléfono y la lectura en la laptop del puesto.</p>
           <a class="btn solid" href="https://calendly.com/edoga-salinas/one-click-kyc" target="_blank" rel="noopener noreferrer">Agendar videollamada de 10 min</a>
-          <p class="meta"><a href="https://wa.me/525621208481?text=Hola%20Edgar%2C%20quiero%20la%20videollamada%20de%2010%20minutos%20del%20piloto%20CiGo.">O escribir por WhatsApp</a> · WSIS Forum · UIT / ONU</p>
+          <p class="meta"><a href="https://www.linkedin.com/in/edogasalinas" target="_blank" rel="noopener noreferrer">LinkedIn</a> · <a href="https://cryptohumano.github.io/peranto-protocol/#/u/@edo">Página pública</a> · <a href="https://wa.me/525621208481?text=Hola%20Edgar%2C%20quiero%20la%20videollamada%20de%2010%20minutos%20del%20piloto%20CiGo.">WhatsApp</a></p>
         </aside>
       </div>
     </section>
@@ -424,6 +497,8 @@
           <li><a href="#postular">Programa piloto pionero</a></li>
           <li><a href="https://calendly.com/edoga-salinas/one-click-kyc" target="_blank" rel="noopener noreferrer">Videollamada de 10 min</a></li>
           <li><a href="mailto:outreach@peranto.app">outreach@peranto.app</a></li>
+          <li><a href="https://www.linkedin.com/in/edogasalinas" target="_blank" rel="noopener noreferrer">LinkedIn de Edgar</a></li>
+          <li><a href="https://cryptohumano.github.io/peranto-protocol/#/u/@edo">Página pública</a></li>
         </ul>
       </div>
     </div>
