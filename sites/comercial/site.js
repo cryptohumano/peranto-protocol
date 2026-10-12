@@ -102,6 +102,15 @@
       }
     };
     [members, cost, rate].forEach((input) => input.addEventListener("input", paint));
+    calc.querySelectorAll("[data-step]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const input = button.parentElement.querySelector('input[type="range"]');
+        const next = Number(input.value) + Number(button.dataset.step) * Number(input.step);
+        input.value = String(Math.min(Number(input.max), Math.max(Number(input.min), next)));
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+    });
+    calc.querySelector("form")?.addEventListener("submit", (event) => event.preventDefault());
     paint();
   }
 

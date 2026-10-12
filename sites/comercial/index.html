@@ -38,7 +38,7 @@
           <p class="lead" style="margin-top:16px">Sustituye carnets de plástico y gafetes perdidos por una credencial que la persona lleva en su teléfono. El ciclo de validación en el puesto es de unos 10 segundos: lectura NFC o QR y comprobación de la firma en la laptop, con un lector USB de escritorio.</p>
           <div class="actions">
             <a class="btn solid" href="#postular">Postular a piloto pionero (50 pases)</a>
-            <a class="btn ghost" href="#postular">Solicitar videollamada de 10 min</a>
+            <a class="btn ghost" href="https://calendly.com/edoga-salinas/one-click-kyc" target="_blank" rel="noopener noreferrer">Agendar videollamada de 10 min</a>
           </div>
           <p class="trust">Despliegue guiado con el fundador · Lector NFC estándar en la PC · El puesto es una laptop de la organización.</p>
         </div>
@@ -76,7 +76,7 @@
       </div>
     </section>
 
-    <section class="band" id="pioneros">
+    <section id="pioneros">
       <div class="wrap cards">
         <article class="card">
           <p class="kicker">Convocatoria pioneros · 50 pases piloto</p>
@@ -131,7 +131,7 @@
       </div>
     </section>
 
-    <section class="band" id="plastico">
+    <section id="plastico">
       <div class="wrap">
         <p class="kicker">Análisis comparativo operacional</p>
         <h2>Frente al carnet de plástico.</h2>
@@ -180,15 +180,27 @@
           <form class="card">
             <label class="field">Personas en la organización
               <output data-members>500</output>
-              <input type="range" name="members" min="50" max="3000" step="10" value="500" />
+              <span class="stepper">
+                <button type="button" data-step="-1" aria-label="Menos personas">−</button>
+                <input type="range" name="members" min="50" max="3000" step="10" value="500" />
+                <button type="button" data-step="1" aria-label="Más personas">+</button>
+              </span>
             </label>
             <label class="field">Costo estimado por carnet, cordón y porta (MXN)
               <output data-cost>$48</output>
-              <input type="range" name="cost" min="20" max="150" step="1" value="48" />
+              <span class="stepper">
+                <button type="button" data-step="-1" aria-label="Bajar el costo">−</button>
+                <input type="range" name="cost" min="20" max="150" step="1" value="48" />
+                <button type="button" data-step="1" aria-label="Subir el costo">+</button>
+              </span>
             </label>
             <label class="field">Reposición anual por extravío o deterioro
               <output data-rate>15%</output>
-              <input type="range" name="rate" min="5" max="40" step="1" value="15" />
+              <span class="stepper">
+                <button type="button" data-step="-1" aria-label="Bajar la reposición">−</button>
+                <input type="range" name="rate" min="5" max="40" step="1" value="15" />
+                <button type="button" data-step="1" aria-label="Subir la reposición">+</button>
+              </span>
             </label>
             <p class="note" data-formula></p>
           </form>
@@ -237,7 +249,7 @@
       </div>
     </section>
 
-    <section class="band" id="casos">
+    <section id="casos">
       <div class="wrap">
         <p class="kicker">Dónde se usa</p>
         <h2>La caseta, el aula, la asamblea y la fila.</h2>
@@ -349,9 +361,9 @@
         <aside class="card">
           <p class="kicker">Contacto directo</p>
           <h3>Edgar · fundador y arquitecto de CiGo</h3>
-          <p>Deja tus datos y coordinamos una videollamada de 10 minutos: emisión en presencia en tu teléfono y lectura en la laptop del puesto.</p>
-          <a class="btn solid" href="#solicitud">Solicitar videollamada de 10 min</a>
-          <p class="meta">WSIS Forum · UIT / ONU</p>
+          <p>Agenda 10 minutos. En la llamada vemos la emisión en tu teléfono y la lectura en la laptop del puesto.</p>
+          <a class="btn solid" href="https://calendly.com/edoga-salinas/one-click-kyc" target="_blank" rel="noopener noreferrer">Agendar videollamada de 10 min</a>
+          <p class="meta"><a href="https://wa.me/525621208481?text=Hola%20Edgar%2C%20quiero%20la%20videollamada%20de%2010%20minutos%20del%20piloto%20CiGo.">O escribir por WhatsApp</a> · WSIS Forum · UIT / ONU</p>
         </aside>
       </div>
     </section>
@@ -385,7 +397,7 @@
         <h3>Contacto</h3>
         <ul>
           <li><a href="#postular">Programa piloto pionero</a></li>
-          <li><a href="#postular">Videollamada de 10 min</a></li>
+          <li><a href="https://calendly.com/edoga-salinas/one-click-kyc" target="_blank" rel="noopener noreferrer">Videollamada de 10 min</a></li>
           <li><a href="mailto:outreach@peranto.app">outreach@peranto.app</a></li>
         </ul>
       </div>
