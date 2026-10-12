@@ -46,11 +46,28 @@
           <div class="sim-grid">
             <article class="phone">
               <p class="tag">Cartera en el teléfono</p>
-              <video class="reel" src="presentacion.mp4" autoplay muted loop playsinline aria-label="Presentación de la credencial en la cartera de CiGo"></video>
+              <div class="handset">
+                <span class="notch" aria-hidden="true"></span>
+                <div class="screen">
+                  <video class="reel" poster="miniatura-telefono.webp" autoplay muted loop playsinline aria-label="Presentación de la credencial en la cartera de CiGo">
+                    <source src="presentacion.mp4" type="video/mp4" />
+                  </video>
+                </div>
+              </div>
             </article>
             <article class="desk">
               <p class="tag">Puesto de control en la laptop</p>
-              <video class="reel wide" src="puesto.mp4" autoplay muted loop playsinline aria-label="El escritorio de CiGo leyendo la credencial en el puesto"></video>
+              <div class="window">
+                <div class="titlebar">
+                  <span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>
+                  <span>CiGo Escritorio</span>
+                </div>
+                <div class="screen wide">
+                  <video class="reel wide" poster="miniatura-escritorio.webp" autoplay muted loop playsinline aria-label="El escritorio de CiGo leyendo la credencial en el puesto">
+                    <source src="puesto.mp4" type="video/mp4" />
+                  </video>
+                </div>
+              </div>
             </article>
           </div>
           <p class="note">A la izquierda, la cartera en el teléfono. A la derecha, el puesto en la laptop: el código queda activo y la cámara coteja a quien presenta. La firma del reto es secp256k1.</p>
@@ -227,7 +244,7 @@
         </details>
         <details>
           <summary>¿Por qué la validación toma unos 10 segundos?</summary>
-          <p>El ciclo que medimos en operación incluye acercar el teléfono, la lectura NFC o el enfoque del QR, la comprobación de la firma en el escritorio y la línea que ve el guardia en la bitácora. El botón de arriba recorre ese ciclo en la página.</p>
+          <p>El ciclo que medimos en operación incluye acercar el teléfono, la lectura NFC o el enfoque del QR, la comprobación de la firma en el escritorio y la línea que ve el guardia en la bitácora. Arriba se ve ese ciclo: la cartera en el teléfono y el puesto en la laptop.</p>
         </details>
         <details>
           <summary>¿Qué equipo hace falta?</summary>
@@ -262,11 +279,17 @@
           <label class="field">Teléfono o WhatsApp
             <input name="phone" required maxlength="30" placeholder="+52 55 1234 5678" autocomplete="tel" />
           </label>
+          <fieldset class="via">
+            <legend>Enviar la postulación por</legend>
+            <label><input type="radio" name="via" value="wa" checked /> WhatsApp</label>
+            <label><input type="radio" name="via" value="mail" /> Correo</label>
+          </fieldset>
           <div class="actions">
-            <button class="btn solid" type="submit">Postular para piloto pionero</button>
+            <button class="btn solid" type="submit" data-send>Abrir WhatsApp con la postulación</button>
           </div>
-          <p class="note">Los datos se arman en esta página para copiarlos. No pasan por un servidor de este sitio.</p>
+          <p class="note">Al enviar se abre WhatsApp o tu correo con estos datos. Esta página no los guarda en un servidor.</p>
           <div class="ready" data-ready hidden>
+            <p data-status></p>
             <p data-summary></p>
             <button class="btn ghost" type="button" data-copy>Copiar postulación</button>
           </div>

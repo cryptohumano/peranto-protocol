@@ -1,6 +1,6 @@
 (function () {
-  const WA_NUMBER = "";
-  const WA_TEXT = "Hola Edgar, quiero conocer la demo de CiGo";
+  const WA_NUMBER = "525621208481";
+  const MAIL_TO = "outreach@peranto.app";
   const money = new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 });
 
   const menuBtn = document.querySelector(".menu-btn");
@@ -19,10 +19,6 @@
   }
 
   document.querySelectorAll("[data-wa]").forEach((node) => {
-    if (WA_NUMBER) {
-      node.href = "https://wa.me/" + WA_NUMBER + "?text=" + encodeURIComponent(WA_TEXT);
-      return;
-    }
     node.addEventListener("click", (event) => {
       event.preventDefault();
       const phone = document.querySelector('[name="phone"]');
@@ -105,22 +101,44 @@
   if (form) {
     const ready = form.querySelector("[data-ready]");
     const summary = form.querySelector("[data-summary]");
+    const status = form.querySelector("[data-status]");
+    const send = form.querySelector("[data-send]");
+    const labelFor = () => (form.querySelector('[name="via"]:checked')?.value === "mail"
+      ? "Abrir el correo con la postulación"
+      : "Abrir WhatsApp con la postulación");
+    form.querySelectorAll('[name="via"]').forEach((input) => {
+      input.addEventListener("change", () => { send.textContent = labelFor(); });
+    });
     form.addEventListener("submit", (event) => {
       event.preventDefault();
       const data = new FormData(form);
+      const name = String(data.get("name")).trim();
       const text = [
         "Postulación · Piloto pionero CiGo",
-        "Responsable: " + String(data.get("name")).trim(),
+        "Responsable: " + name,
         "Organización: " + String(data.get("kind")),
         "Miembros: " + String(data.get("size")).trim(),
         "Correo: " + String(data.get("email")).trim(),
-        "WhatsApp: " + String(data.get("phone")).trim(),
+        "Teléfono: " + String(data.get("phone")).trim(),
         "Piloto: 50 credenciales",
-        "La postulación queda en esta página. No se envía a un servidor.",
+        "Quiero la videollamada de 10 minutos.",
       ].join("\n");
       summary.textContent = text;
       ready.hidden = false;
       ready.dataset.text = text;
+      if (data.get("via") === "mail") {
+        window.location.href = "mailto:" + MAIL_TO
+          + "?subject=" + encodeURIComponent("Postulación piloto pionero CiGo — " + name)
+          + "&body=" + encodeURIComponent(text);
+        status.textContent = "Se abrió el correo con esta postulación, dirigida a " + MAIL_TO + ".";
+        return;
+      }
+      const link = document.createElement("a");
+      link.href = "https://wa.me/" + WA_NUMBER + "?text=" + encodeURIComponent(text);
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      link.click();
+      status.textContent = "Se abrió WhatsApp con esta postulación, al +52 56 2120 8481.";
     });
     form.querySelector("[data-copy]").addEventListener("click", async () => {
       const button = form.querySelector("[data-copy]");
